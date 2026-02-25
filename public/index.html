@@ -971,85 +971,84 @@
       </div>
     </div>
 
-    <!-- MAIN: Powerwall + Energy Flow -->
-    <div class="main" style="grid-template-columns: 1fr 2fr 1fr; gap: 20px;">
-      <!-- Left: Status Indicators -->
-      <div class="powerwall-section">
-        <div style="text-align: center; margin-bottom: 15px;">
+    <!-- MAIN: Powerwall + Energy Flow (Horizontal) -->
+    <div class="main" style="display: flex; gap: 20px; grid-column: 1/4; grid-row: 2;">
+      <!-- Left: Status Indicators (compact) -->
+      <div style="min-width: 150px; display: flex; flex-direction: column; gap: 15px;">
+        <div style="text-align: center;">
           <div class="status-label">Self-Powered</div>
-          <div class="status-value white" id="pw-self-powered">-- %</div>
+          <div class="status-value white" id="pw-self-powered" style="font-size: 1.8rem;">-- %</div>
         </div>
         
-        <div style="text-align: center; font-size: 0.85rem; color: #999; margin-bottom: 15px;">
+        <div style="text-align: center; font-size: 0.8rem;">
           <span id="battery-status">Standby</span>
         </div>
 
-        <div style="text-align: center; font-size: 0.75rem; color: #666; line-height: 1.4;">
+        <div style="text-align: center; font-size: 0.7rem; color: #666; line-height: 1.6;">
           <div id="grid-status">Grid: --</div>
-          <div id="battery-soe-status" style="margin-top: 8px;">Battery: --%</div>
+          <div id="battery-soe-status">Battery: --%</div>
         </div>
 
-        <div style="margin-top: 20px; text-align: center;">
-          <div class="status-label">BATTERY</div>
-          <div class="battery-bar">
+        <div style="text-align: center;">
+          <div class="status-label">SOC</div>
+          <div class="battery-bar" style="margin-top: 8px;">
             <div class="battery-fill" id="battery-fill" style="width: 100%;">100%</div>
           </div>
         </div>
       </div>
 
-      <!-- Center: Energy Flow Visualization -->
-      <div style="display: flex; align-items: center; justify-content: center;">
-        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius: 8px; padding: 20px; border: 1px solid rgba(255,255,255,0.1);">
-          <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" class="energy-flow-diagram" style="width: 100%; height: 100%;">
-            <defs>
-              <style>
-                .energy-label { font-size: 16px; font-weight: bold; fill: #e0e0e0; text-anchor: middle; }
-                .energy-value { font-size: 24px; font-weight: bold; fill: #64b5f6; text-anchor: middle; }
-                .energy-unit { font-size: 14px; fill: #999; text-anchor: middle; }
-                .source-icon { font-size: 48px; text-anchor: middle; }
-                .home-icon { font-size: 64px; text-anchor: middle; }
-                .flow-path { fill: none; stroke-width: 3; }
-                .solar-path { stroke: #ffd700; }
-                .battery-path { stroke: #4caf50; }
-                .grid-path { stroke: #f44336; }
-                .bubble { fill: #fff; opacity: 0.8; }
-              </style>
-              <filter id="glow"><feGaussianBlur stdDeviation="2" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            </defs>
-            <rect width="1000" height="600" fill="transparent"/>
-            <text x="500" y="40" class="energy-label" style="font-size: 28px;">Energy Flow</text>
-            
-            <!-- SOLAR -->
-            <g id="solar-section"><text x="120" y="120" class="source-icon">☀️</text><text x="120" y="160" class="energy-label">SOLAR</text><text x="120" y="190" class="energy-value" id="flow-solar-power">0</text><text x="120" y="215" class="energy-unit">kW</text></g>
-            
-            <!-- BATTERY -->
-            <g id="battery-section"><text x="500" y="120" class="source-icon">🔋</text><text x="500" y="160" class="energy-label">BATTERY</text><text x="500" y="190" class="energy-value" id="flow-battery-power">0</text><text x="500" y="215" class="energy-unit" id="flow-battery-soe">0%</text></g>
-            
-            <!-- GRID -->
-            <g id="grid-section"><text x="880" y="120" class="source-icon">⚡</text><text x="880" y="160" class="energy-label">GRID</text><text x="880" y="190" class="energy-value" id="flow-grid-power">0</text><text x="880" y="215" class="energy-unit">kW</text></g>
-            
-            <!-- HOME -->
-            <g id="home-section"><text x="500" y="420" class="home-icon">🏠</text><text x="500" y="480" class="energy-label">HOME</text><text x="500" y="520" class="energy-value" id="flow-home-power">0</text><text x="500" y="545" class="energy-unit">kW</text></g>
-            
-            <!-- Flow Paths -->
-            <path d="M 150 200 Q 300 300 430 400" class="flow-path solar-path" id="solar-flow"/>
-            <g id="solar-bubble"><circle cx="150" cy="200" r="6" class="bubble solar-path" filter="url(#glow)"/></g>
-            <path d="M 500 250 L 500 380" class="flow-path battery-path" id="battery-flow"/>
-            <g id="battery-bubble"><circle cx="500" cy="250" r="6" class="bubble battery-path" filter="url(#glow)"/></g>
-            <path d="M 850 200 Q 700 300 570 400" class="flow-path grid-path" id="grid-flow"/>
-            <g id="grid-bubble"><circle cx="850" cy="200" r="6" class="bubble grid-path" filter="url(#glow)"/></g>
-            
-            <!-- Battery State Bar -->
-            <rect x="400" y="130" width="200" height="16" fill="none" stroke="#555" stroke-width="1" rx="8"/>
-            <rect x="400" y="130" width="0" height="16" fill="#4caf50" rx="8" id="flow-battery-bar"/>
-          </svg>
-        </div>
+      <!-- Center: Energy Flow Visualization (compact horizontal) -->
+      <div style="flex: 1; background: linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius: 8px; padding: 15px; border: 1px solid rgba(255,255,255,0.1); min-height: 250px;">
+        <svg viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg" class="energy-flow-diagram" style="width: 100%; height: 100%;">
+          <defs>
+            <style>
+              .energy-label { font-size: 12px; font-weight: bold; fill: #e0e0e0; text-anchor: middle; }
+              .energy-value { font-size: 18px; font-weight: bold; fill: #64b5f6; text-anchor: middle; }
+              .energy-unit { font-size: 11px; fill: #999; text-anchor: middle; }
+              .source-icon { font-size: 36px; text-anchor: middle; }
+              .home-icon { font-size: 48px; text-anchor: middle; }
+              .flow-path { fill: none; stroke-width: 2; }
+              .solar-path { stroke: #ffd700; }
+              .battery-path { stroke: #4caf50; }
+              .grid-path { stroke: #f44336; }
+              .bubble { fill: #fff; opacity: 0.8; }
+            </style>
+            <filter id="glow"><feGaussianBlur stdDeviation="1.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <rect width="800" height="200" fill="transparent"/>
+          
+          <!-- SOLAR (left) -->
+          <g id="solar-section"><text x="60" y="45" class="source-icon">☀️</text><text x="60" y="75" class="energy-label">SOLAR</text><text x="60" y="95" class="energy-value" id="flow-solar-power">0</text><text x="60" y="110" class="energy-unit">kW</text></g>
+          
+          <!-- BATTERY (center-left) -->
+          <g id="battery-section"><text x="280" y="45" class="source-icon">🔋</text><text x="280" y="75" class="energy-label">BATT</text><text x="280" y="95" class="energy-value" id="flow-battery-power">0</text><text x="280" y="110" class="energy-unit" id="flow-battery-soe">0%</text></g>
+          
+          <!-- HOME (center-right) -->
+          <g id="home-section"><text x="500" y="30" class="home-icon">🏠</text><text x="500" y="85" class="energy-label">HOME</text><text x="500" y="105" class="energy-value" id="flow-home-power">0</text><text x="500" y="120" class="energy-unit">kW</text></g>
+          
+          <!-- GRID (right) -->
+          <g id="grid-section"><text x="740" y="45" class="source-icon">⚡</text><text x="740" y="75" class="energy-label">GRID</text><text x="740" y="95" class="energy-value" id="flow-grid-power">0</text><text x="740" y="110" class="energy-unit">kW</text></g>
+          
+          <!-- Flow Paths (simplified horizontal) -->
+          <path d="M 90 60 L 250 60" class="flow-path solar-path" id="solar-flow"/>
+          <g id="solar-bubble"><circle cx="90" cy="60" r="4" class="bubble solar-path" filter="url(#glow)"/></g>
+          
+          <path d="M 310 60 L 430 60" class="flow-path battery-path" id="battery-flow"/>
+          <g id="battery-bubble"><circle cx="310" cy="60" r="4" class="bubble battery-path" filter="url(#glow)"/></g>
+          
+          <path d="M 570 60 L 710 60" class="flow-path grid-path" id="grid-flow"/>
+          <g id="grid-bubble"><circle cx="710" cy="60" r="4" class="bubble grid-path" filter="url(#glow)"/></g>
+          
+          <!-- Battery State Bar -->
+          <rect x="250" y="130" width="60" height="8" fill="none" stroke="#555" stroke-width="0.5" rx="4"/>
+          <rect x="250" y="130" width="0" height="8" fill="#4caf50" rx="4" id="flow-battery-bar"/>
+        </svg>
       </div>
 
       <!-- Right: Charts -->
-      <div class="powerwall-section">
-        <div class="chart-container">
-          <div class="chart-title">24-Hour Power Flow</div>
+      <div style="min-width: 280px;">
+        <div class="chart-container" style="height: 250px;">
+          <div class="chart-title">24-Hour Power</div>
           <canvas id="powerChart"></canvas>
         </div>
       </div>
@@ -1558,29 +1557,44 @@
     }
 
     function updateEnergyFlow(data) {
-      const solarKW = Math.max(0, data.solar.power) / 1000;
-      const batteryKW = data.battery.power / 1000;
-      const gridKW = Math.max(0, data.grid.power) / 1000;
-      const homeKW = data.load.power / 1000;
-      const soe = Math.round(data.battery.soe);
+      try {
+        const solarKW = Math.max(0, data.solar.power) / 1000;
+        const batteryKW = data.battery.power / 1000;
+        const gridKW = Math.max(0, data.grid.power) / 1000;
+        const homeKW = data.load.power / 1000;
+        const soe = Math.round(data.battery.soe);
 
-      // Update values in SVG
-      document.getElementById('flow-solar-power').textContent = solarKW.toFixed(2);
-      document.getElementById('flow-battery-power').textContent = Math.abs(batteryKW).toFixed(2);
-      document.getElementById('flow-battery-soe').textContent = soe + '%';
-      document.getElementById('flow-grid-power').textContent = gridKW.toFixed(2);
-      document.getElementById('flow-home-power').textContent = homeKW.toFixed(2);
+        // Update values in SVG
+        const solarEl = document.getElementById('flow-solar-power');
+        if (solarEl) solarEl.textContent = solarKW.toFixed(2);
+        
+        const batteryEl = document.getElementById('flow-battery-power');
+        if (batteryEl) batteryEl.textContent = Math.abs(batteryKW).toFixed(2);
+        
+        const soeEl = document.getElementById('flow-battery-soe');
+        if (soeEl) soeEl.textContent = soe + '%';
+        
+        const gridEl = document.getElementById('flow-grid-power');
+        if (gridEl) gridEl.textContent = gridKW.toFixed(2);
+        
+        const homeEl = document.getElementById('flow-home-power');
+        if (homeEl) homeEl.textContent = homeKW.toFixed(2);
 
-      // Update battery bar
-      document.getElementById('flow-battery-bar').setAttribute('width', soe * 2);
+        // Update battery bar
+        const barEl = document.getElementById('flow-battery-bar');
+        if (barEl) barEl.setAttribute('width', soe * 2);
 
-      // Animate bubbles based on power flow
-      animateBubble('solar-bubble', data.solar.power, 5000);
-      animateBubble('battery-bubble', data.battery.power, 5000);
-      animateBubble('grid-bubble', data.grid.power, 5000);
+        // Animate bubbles based on power flow
+        animateBubble('solar-bubble', data.solar.power, 5000);
+        animateBubble('battery-bubble', data.battery.power, 5000);
+        animateBubble('grid-bubble', data.grid.power, 5000);
 
-      // Update status display
-      document.getElementById('battery-soe-status').textContent = `Battery: ${soe}%`;
+        // Update status display
+        const soeStatusEl = document.getElementById('battery-soe-status');
+        if (soeStatusEl) soeStatusEl.textContent = `Battery: ${soe}%`;
+      } catch (error) {
+        console.error('Energy flow update error:', error);
+      }
     }
 
     let chart;
