@@ -1,0 +1,86 @@
+<svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" class="energy-flow-diagram">
+  <defs>
+    <style>
+      .energy-label { font-size: 16px; font-weight: bold; fill: #e0e0e0; text-anchor: middle; }
+      .energy-value { font-size: 24px; font-weight: bold; fill: #64b5f6; text-anchor: middle; }
+      .energy-unit { font-size: 14px; fill: #999; text-anchor: middle; }
+      .source-icon { font-size: 48px; text-anchor: middle; }
+      .home-icon { font-size: 64px; text-anchor: middle; }
+      .flow-path { fill: none; stroke-width: 3; }
+      .solar-path { stroke: #ffd700; }
+      .battery-path { stroke: #4caf50; }
+      .grid-path { stroke: #f44336; }
+      .bubble { fill: #fff; opacity: 0.8; }
+    </style>
+    
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="600" fill="#0a0a0a"/>
+
+  <!-- Title -->
+  <text x="500" y="40" class="energy-label" style="font-size: 28px;">Energy Flow</text>
+
+  <!-- Source Positions: Top Row -->
+  <!-- SOLAR (Left) -->
+  <g id="solar-section">
+    <text x="120" y="120" class="source-icon">☀️</text>
+    <text x="120" y="160" class="energy-label">SOLAR</text>
+    <text x="120" y="190" class="energy-value" id="solar-power">0</text>
+    <text x="120" y="215" class="energy-unit">kW</text>
+  </g>
+
+  <!-- BATTERY (Center) -->
+  <g id="battery-section">
+    <text x="500" y="120" class="source-icon">🔋</text>
+    <text x="500" y="160" class="energy-label">BATTERY</text>
+    <text x="500" y="190" class="energy-value" id="battery-power">0</text>
+    <text x="500" y="215" class="energy-unit" id="battery-soe">0%</text>
+  </g>
+
+  <!-- GRID (Right) -->
+  <g id="grid-section">
+    <text x="880" y="120" class="source-icon">⚡</text>
+    <text x="880" y="160" class="energy-label">GRID</text>
+    <text x="880" y="190" class="energy-value" id="grid-power">0</text>
+    <text x="880" y="215" class="energy-unit">kW</text>
+  </g>
+
+  <!-- HOME (Bottom Center) -->
+  <g id="home-section">
+    <text x="500" y="420" class="home-icon">🏠</text>
+    <text x="500" y="480" class="energy-label">HOME</text>
+    <text x="500" y="520" class="energy-value" id="home-power">0</text>
+    <text x="500" y="545" class="energy-unit">kW</text>
+  </g>
+
+  <!-- Flow Paths (curves from sources to home) -->
+  <!-- Solar Path -->
+  <path d="M 150 200 Q 300 300 430 400" class="flow-path solar-path" id="solar-flow"/>
+  <g id="solar-bubble">
+    <circle cx="150" cy="200" r="6" class="bubble solar-path" filter="url(#glow)"/>
+  </g>
+
+  <!-- Battery Path -->
+  <path d="M 500 250 L 500 380" class="flow-path battery-path" id="battery-flow"/>
+  <g id="battery-bubble">
+    <circle cx="500" cy="250" r="6" class="bubble battery-path" filter="url(#glow)"/>
+  </g>
+
+  <!-- Grid Path -->
+  <path d="M 850 200 Q 700 300 570 400" class="flow-path grid-path" id="grid-flow"/>
+  <g id="grid-bubble">
+    <circle cx="850" cy="200" r="6" class="bubble grid-path" filter="url(#glow)"/>
+  </g>
+
+  <!-- Battery State Indicator -->
+  <rect x="400" y="130" width="200" height="16" fill="none" stroke="#555" stroke-width="1" rx="8"/>
+  <rect x="400" y="130" width="0" height="16" fill="#4caf50" rx="8" id="battery-bar"/>
+</svg>
