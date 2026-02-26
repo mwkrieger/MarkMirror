@@ -837,6 +837,140 @@ app.get('/api/today-in-history', async (req, res) => {
   }
 });
 
+
+
+// ═══ Rivian Manual Re-Auth (POST /api/rivian/auth with {otpCode}) ═══
+app.post('/api/rivian/auth', async (req, res) => {
+  try {
+    const { otpCode } = req.body;
+    if (!otpCode) return res.status(400).json({ error: 'otpCode required' });
+    
+    const csrfRes = await axios.post(RIVIAN_GQL, {
+      operationName: 'CreateCSRFToken', variables: [],
+      query: 'mutation CreateCSRFToken { createCsrfToken { __typename csrfToken appSessionToken } }'
+    }, { headers: RIVIAN_BASE_HEADERS, timeout: 10000 });
+    const { csrfToken, appSessionToken } = csrfRes.data.data.createCsrfToken;
+    const h = { ...RIVIAN_BASE_HEADERS, 'a-sess': appSessionToken, 'csrf-token': csrfToken };
+    
+    const loginRes = await axios.post(RIVIAN_GQL, {
+      operationName: 'Login',
+      variables: { email: RIVIAN_EMAIL, password: RIVIAN_PASSWORD },
+      query: 'mutation Login($email: String!, $password: String!) { login(email: $email, password: $password) { __typename ... on MobileLoginResponse { accessToken refreshToken userSessionToken } ... on MobileMFALoginResponse { otpToken } } }'
+    }, { headers: h, timeout: 15000 });
+    
+    const loginData = loginRes.data?.data?.login;
+    if (!loginData) return res.status(401).json({ error: 'Login failed', details: loginRes.data });
+    
+    if (loginData.otpToken) {
+      const otpRes = await axios.post(RIVIAN_GQL, {
+        operationName: 'LoginWithOTP',
+        variables: { email: RIVIAN_EMAIL, otpCode, otpToken: loginData.otpToken },
+        query: 'mutation LoginWithOTP($email: String!, $otpCode: String!, $otpToken: String!) { loginWithOTP(email: $email, otpCode: $otpCode, otpToken: $otpToken) { __typename accessToken refreshToken userSessionToken } }'
+      }, { headers: h, timeout: 15000 });
+      
+      const otpData = otpRes.data?.data?.loginWithOTP;
+      if (otpData?.accessToken) {
+        const tokens = { accessToken: otpData.accessToken, refreshToken: otpData.refreshToken, userSessionToken: otpData.userSessionToken, appSessionToken, csrfToken };
+        saveRivianTokens(tokens);
+        global._rivianMfaBlocked = false;
+        global._rivianRefreshAttempts = 0;
+        console.log('[RIVIAN] Manual re-auth SUCCESS');
+        return res.json({ success: true });
+      }
+      return res.status(401).json({ error: 'OTP validation failed', details: otpRes.data });
+    } else if (loginData.accessToken) {
+      const tokens = { accessToken: loginData.accessToken, refreshToken: loginData.refreshToken, userSessionToken: loginData.userSessionToken, appSessionToken, csrfToken };
+      saveRivianTokens(tokens);
+      global._rivianMfaBlocked = false;
+      global._rivianRefreshAttempts = 0;
+      return res.json({ success: true, mfa: false });
+    }
+  } catch (e) {
+    console.error('[RIVIAN] Manual auth error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.response?.data || e.message });
+  }
+});
+
+// ═══ ISS Tracker (wheretheiss.at) ═══
+app.get('/api/iss', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.iss && now - cachedData.lastUpdate.iss < 15000) {
+      return res.json(cachedData.iss);
+    }
+    const r = await axios.get('https://api.wheretheiss.at/v1/satellites/25544', { timeout: 8000 });
+    const d = r.data;
+    
+    // Calculate distance from Hawley PA (41.48, -75.18)
+    const lat1 = 41.48 * Math.PI / 180;
+    const lat2 = d.latitude * Math.PI / 180;
+    const dLat = (d.latitude - 41.48) * Math.PI / 180;
+    const dLon = (d.longitude - (-75.18)) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distKm = 6371 * c;
+    const distMi = Math.round(distKm * 0.621371);
+    
+    // Reverse geocode ISS position (rough region)
+    let overRegion = '';
+    const lat = d.latitude;
+    const lon = d.longitude;
+    if (lat < -60) overRegion = 'Antarctica';
+    else if (lat > 60) overRegion = 'Arctic Region';
+    else {
+      // Simple ocean/continent detection
+      if (lon > -30 && lon < 60 && lat > 0 && lat < 60) overRegion = 'Europe/Africa';
+      else if (lon > 60 && lon < 150 && lat > 0) overRegion = 'Asia';
+      else if (lon > 100 && lon < 180 && lat < 0) overRegion = 'Australia/Pacific';
+      else if (lon > -130 && lon < -30 && lat > 0 && lat < 60) overRegion = 'North America';
+      else if (lon > -90 && lon < -30 && lat < 0) overRegion = 'South America';
+      else if (lon > 20 && lon < 55 && lat < 0 && lat > -40) overRegion = 'Africa';
+      else overRegion = 'Over Ocean';
+    }
+    
+    // Reverse geocode ISS position
+    let locationName = overRegion;
+    try {
+      const geo = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+        params: { lat: d.latitude, lon: d.longitude, format: 'json', zoom: 5 },
+        headers: { 'User-Agent': 'WallDashboard/1.0' },
+        timeout: 5000
+      });
+      if (geo.data?.display_name) {
+        // Get country or state-level name
+        const addr = geo.data.address || {};
+        const parts = [addr.state || addr.region || addr.county || '', addr.country || ''].filter(Boolean);
+        locationName = parts.join(', ') || geo.data.display_name.split(',').slice(-2).join(',').trim() || overRegion;
+      }
+    } catch (e) {
+      // Over ocean - use rough region
+      locationName = overRegion;
+    }
+
+    const result = {
+      latitude: Math.round(d.latitude * 100) / 100,
+      longitude: Math.round(d.longitude * 100) / 100,
+      altitude: Math.round(d.altitude),
+      altitudeMi: Math.round(d.altitude * 0.621371),
+      velocity: Math.round(d.velocity),
+      velocityMph: Math.round(d.velocity * 0.621371),
+      visibility: d.visibility,
+      distanceMi: distMi,
+      overRegion,
+      locationName,
+      isNearby: distMi < 500,
+      timestamp: new Date().toISOString()
+    };
+    
+    cachedData.iss = result;
+    cachedData.lastUpdate.iss = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[ISS] Fetch error:', e.message);
+    res.json(cachedData.iss || { latitude: 0, longitude: 0, distanceMi: 0, visibility: 'unknown' });
+  }
+});
+
 // ═══ Pollen (Google Pollen API) ═══
 app.get('/api/pollen', async (req, res) => {
   try {
@@ -1125,10 +1259,10 @@ async function fetchPowerwallData() {
       dailyBreakdown.solarPct = Math.round((daySolar / dayLoad) * 100);
       dailyBreakdown.batteryPct = Math.round((dayBattery / dayLoad) * 100);
       dailyBreakdown.gridPct = Math.round((dayGrid / dayLoad) * 100);
-      dailyBreakdown.solarKwh = (daySolar / 1e6).toFixed(1);
-      dailyBreakdown.batteryKwh = (dayBattery / 1e6).toFixed(1);
-      dailyBreakdown.gridKwh = (dayGrid / 1e6).toFixed(1);
-      dailyBreakdown.loadKwh = (dayLoad / 1e6).toFixed(1);
+      dailyBreakdown.solarKwh = (daySolar / 1000).toFixed(1);
+      dailyBreakdown.batteryKwh = (dayBattery / 1000).toFixed(1);
+      dailyBreakdown.gridKwh = (dayGrid / 1000).toFixed(1);
+      dailyBreakdown.loadKwh = (dayLoad / 1000).toFixed(1);
       dailySelfPowered = Math.round(((daySolar + dayBattery) / dayLoad) * 100);
       dailySelfPowered = Math.max(0, Math.min(100, dailySelfPowered));
     }
@@ -1464,7 +1598,8 @@ async function refreshRivianTokens() {
 
     const loginData = loginRes.data.data.login;
     if (loginData.__typename === 'MobileMFALoginResponse') {
-      console.error('[RIVIAN] ⚠️ MFA required for token refresh — cannot auto-refresh. Tokens will expire.');
+      console.error('[RIVIAN] ⚠️ MFA required — stopping auto-refresh to prevent OTP spam.');
+      global._rivianMfaBlocked = true;
       rivianRefreshing = false;
       return getRivianTokens(); // return existing (may still work briefly)
     }

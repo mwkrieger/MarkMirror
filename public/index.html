@@ -108,7 +108,7 @@
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      padding-top: 10px;
+      padding-top: 0;
     }
 
     .date {
@@ -121,7 +121,7 @@
     }
 
     .time {
-      font-size: 90px;
+      font-size: 110px;
       font-weight: 900;
       letter-spacing: -3px;
       line-height: 1;
@@ -149,9 +149,9 @@
     }
 
     .sun-times {
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       color: #999;
-      margin-top: 12px;
+      margin-top: 14px;
       display: flex;
       flex-direction: row;
       gap: 16px;
@@ -166,12 +166,12 @@
       flex-direction: row;
       gap: 6px;
       align-items: center;
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       color: #bbb;
     }
 
-    .sun-icon { font-size: 1.1em; }
-    .moon-icon { font-size: 1.1em; }
+    .sun-icon { font-size: 1.3em; }
+    .moon-icon { font-size: 1.3em; }
     .sun-arrow { font-size: 0.9em; color: #999; min-width: 8px; text-align: center; }
 
     /* Inside/Outside temp tiles in top-left */
@@ -233,7 +233,7 @@
     }
 
     .section-title {
-      font-size: 11px;
+      font-size: 13px;
       text-transform: uppercase;
       letter-spacing: 2px;
       color: var(--text-tertiary);
@@ -251,14 +251,14 @@
     }
 
     .weather-main {
-      font-size: 64px !important;
+      font-size: 75px !important;
       font-weight: 700;
       color: var(--text-primary);
       line-height: 1;
     }
 
     #weather-temp {
-      font-size: 64px !important;
+      font-size: 75px !important;
     }
 
     .weather-status {
@@ -267,13 +267,13 @@
     }
 
     .weather-desc {
-      font-size: 16px;
+      font-size: 20px;
       color: var(--text-accent);
       margin-bottom: 4px;
     }
 
     .weather-feels {
-      font-size: 12px;
+      font-size: 15px;
       color: var(--text-secondary);
     }
 
@@ -295,7 +295,7 @@
     }
 
     .forecast-day {
-      font-size: 9px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 1px;
       color: var(--text-tertiary);
@@ -310,18 +310,18 @@
     }
 
     .forecast-high {
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 700;
       color: var(--text-primary);
     }
 
     .forecast-low {
-      font-size: 14px;
+      font-size: 17px;
       color: var(--text-secondary);
     }
 
     .weather-summary {
-      font-size: 13px;
+      font-size: 16px;
       color: var(--text-secondary);
       text-align: left;
       line-height: 1.4;
@@ -783,6 +783,23 @@
     .history-year { font-size: 14px; font-weight: 700; color: #FFB74D; margin-right: 6px; }
     .history-text { font-size: 14px; color: var(--text-primary); line-height: 1.4; }
 
+
+    /* ─── ISS TRACKER ─── */
+    .iss-card {
+      background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .iss-card .stat-label { margin-bottom: 8px; }
+    .iss-nearby { animation: issGlow 2s ease-in-out infinite; }
+    @keyframes issGlow {
+      0%, 100% { box-shadow: 0 0 8px rgba(100, 181, 246, 0.3); }
+      50% { box-shadow: 0 0 20px rgba(100, 181, 246, 0.6); }
+    }
+
 /* ─── BOTTOM BAR ─── */
     .bottom {
       grid-column: 1 / 4;
@@ -834,9 +851,11 @@
       line-height: 1.3;
       width: 100%;
       opacity: 1;
-      transition: opacity 0.5s ease;
+      transition: opacity 0.3s ease;
     }
     .news-headline.fade-out { opacity: 0; }
+    .news-ticker-wrapper { will-change: transform; transform: translateZ(0); contain: layout style; }
+    .news-headline { will-change: opacity; }
     .news-headline-source {
       color: var(--accent-solar);
       font-weight: 700;
@@ -915,17 +934,20 @@
     }
 
     .timer-label {
-      color: #999;
-      font-size: 0.7rem;
+      color: #ccc;
+      font-size: 0.85rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1px;
       margin-bottom: 4px;
+      text-align: center;
     }
 
     .timer-value {
       font-size: 1.3rem;
       font-weight: bold;
       font-family: 'Monaco', monospace;
+      text-align: center;
     }
 
     /* ─── ADMIN MODAL ─── */
@@ -1106,32 +1128,34 @@
   <div class="container">
     <!-- ═══ TOP LEFT: Time, Date, Sun times, Inside/Outside temps ═══ -->
     <div class="top-left">
-      <div class="date" id="date"></div>
-      <div class="time">
-        <span id="time-main">00:00</span><span class="time-seconds" id="time-seconds">00</span><span class="time-ampm" id="time-ampm">AM</span>
-      </div>
+      <div class="stat-card" style="padding: 20px 20px 24px; margin-bottom: 8px;">
+        <div class="date" id="date"></div>
+        <div class="time">
+          <span id="time-main">00:00</span><span class="time-seconds" id="time-seconds">00</span><span class="time-ampm" id="time-ampm">AM</span>
+        </div>
 
-      <div class="sun-times">
-        <span>
-          <span class="sun-icon">☀️</span>
-          <span class="sun-arrow">↑</span>
-          <span id="sunrise">--:--</span>
-        </span>
-        <span>
-          <span class="sun-icon">☀️</span>
-          <span class="sun-arrow">↓</span>
-          <span id="sunset">--:--</span>
-        </span>
-        <span>
-          <span class="moon-icon">🌙</span>
-          <span class="sun-arrow">↑</span>
-          <span id="moonrise">--:--</span>
-        </span>
-        <span>
-          <span class="moon-icon">🌙</span>
-          <span class="sun-arrow">↓</span>
-          <span id="moonset">--:--</span>
-        </span>
+        <div class="sun-times">
+          <span>
+            <span class="sun-icon">☀️</span>
+            <span class="sun-arrow">↑</span>
+            <span id="sunrise">--:--</span>
+          </span>
+          <span>
+            <span class="sun-icon">☀️</span>
+            <span class="sun-arrow">↓</span>
+            <span id="sunset">--:--</span>
+          </span>
+          <span>
+            <span class="moon-icon">🌙</span>
+            <span class="sun-arrow">↑</span>
+            <span id="moonrise">--:--</span>
+          </span>
+          <span>
+            <span class="moon-icon">🌙</span>
+            <span class="sun-arrow">↓</span>
+            <span id="moonset">--:--</span>
+          </span>
+        </div>
       </div>
 
       <!-- All temperature tiles (2x2 grid) -->
@@ -1390,6 +1414,18 @@
         <div style="margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
           <span id="rivian-location">📍 --</span>
         </div>
+      </div>
+
+      <div class="iss-card" id="iss-card">
+        <div class="stat-label">🛰️ ISS Tracker</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin: 4px 0;">
+          <div style="font-size: 22px; font-weight: 700; color: #64B5F6;" id="iss-distance">-- mi</div>
+          <div style="font-size: 11px; color: var(--text-secondary);" id="iss-direction">away</div>
+        </div>
+        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;" id="iss-region">🌍 Over --</div>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 3px;" id="iss-coords"></div>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 3px;" id="iss-speed"></div>
+        <div style="font-size: 11px; margin-top: 3px;" id="iss-visibility"></div>
       </div>
       </div>
     </div>
@@ -1651,7 +1687,7 @@
 
           let display_str = '';
           if (days > 0) display_str += `${days}d `;
-          display_str += `${hours}h ${minutes}m ${seconds}s`;
+          display_str += `${hours}h ${minutes}m`;
 
           return `<div class="timer-item" style="border-color: ${timer.color}">
             <div class="timer-label">${timer.name}</div>
@@ -1663,7 +1699,7 @@
       }
     }
 
-    setInterval(updateTimersDisplay, 1000);
+    setInterval(updateTimersDisplay, 60000);
     updateTimersDisplay();
 
     // Fetch weather
@@ -2540,7 +2576,7 @@
         el.innerHTML = `<span class="news-headline-source">${item.source}</span><span class="news-headline-title">${item.title}</span><span class="news-headline-time">${timeAgo(item.pubDate)}</span>`;
         el.classList.remove('fade-out');
         newsIndex++;
-      }, 500);
+      }, 300);
     }
 
     async function fetchNews() {
@@ -2555,7 +2591,7 @@
     }
     fetchNews();
     setInterval(fetchNews, 600000); // Refresh feed every 10 min
-    setInterval(showNextHeadline, 10000); // Rotate every 10 sec
+    setInterval(showNextHeadline, 15000); // Rotate every 15 sec
 
     // ═══ Word of the Day ═══
     async function fetchWordOfDay() {
@@ -2611,6 +2647,48 @@
     }
     fetchTodayHistory();
     setInterval(showHistoryEvents, 30000);
+
+
+    // ═══ ISS Tracker ═══
+    async function fetchISS() {
+      try {
+        const res = await fetch('/api/iss');
+        const d = await res.json();
+        const card = document.getElementById('iss-card');
+        
+        document.getElementById('iss-distance').textContent = d.distanceMi?.toLocaleString() + ' mi';
+        document.getElementById('iss-region').textContent = '\u{1f30d} ' + (d.overRegion || 'Unknown');
+        document.getElementById('iss-coords').textContent = d.latitude + '\u00b0, ' + d.longitude + '\u00b0';
+        document.getElementById('iss-speed').textContent = '\ud83d\ude80 ' + d.velocityMph?.toLocaleString() + ' mph \u2022 Alt: ' + (d.altitudeMi || Math.round(d.altitude * 0.621371)) + ' mi';
+
+        
+        // Visibility indicator
+        const visEl = document.getElementById('iss-visibility');
+        if (d.visibility === 'daylight') {
+          visEl.textContent = '\u2600\ufe0f Daylight pass';
+          visEl.style.color = '#FFD54F';
+        } else if (d.visibility === 'eclipsed') {
+          visEl.textContent = '\u{1f311} In Earth\'s shadow';
+          visEl.style.color = 'var(--text-secondary)';
+        } else {
+          visEl.textContent = '\u2728 Visible!';
+          visEl.style.color = '#64B5F6';
+        }
+        
+        // Glow when nearby
+        if (d.isNearby) {
+          card.classList.add('iss-nearby');
+          document.getElementById('iss-direction').textContent = 'away — OVERHEAD SOON!';
+          document.getElementById('iss-direction').style.color = '#64B5F6';
+        } else {
+          card.classList.remove('iss-nearby');
+          document.getElementById('iss-direction').textContent = 'away';
+          document.getElementById('iss-direction').style.color = 'var(--text-secondary)';
+        }
+      } catch (e) { console.error('ISS error:', e); }
+    }
+    fetchISS();
+    setInterval(fetchISS, 15000); // Every 15s for real-time feel
 
   </script>
 </body>
