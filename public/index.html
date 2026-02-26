@@ -67,7 +67,8 @@
       width: 100%;
       min-height: 100vh;
       padding: 30px 40px 20px;
-      gap: 20px;
+      column-gap: 20px;
+      row-gap: 12px;
     }
 
     /* ─── ADMIN BUTTON ─── */
@@ -421,7 +422,8 @@
       grid-row: 2;
       display: grid;
       grid-template-columns: 1fr 1.5fr 1fr;
-      gap: 20px;
+      column-gap: 20px;
+      row-gap: 4px;
       align-items: start;
     }
 
@@ -492,6 +494,21 @@
       max-width: 320px;
     }
 
+    .pw-stats {
+      width: 100%;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--glass-border);
+    }
+    .pw-stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      font-size: 12px;
+    }
+    .pw-stat-label { color: var(--text-secondary); }
+    .pw-stat-value { color: var(--text-primary); font-weight: 600; }
+
     .pyr-bottom .pyr-node {
       text-align: center;
     }
@@ -508,14 +525,17 @@
     }
     .flow-dot {
       position: absolute;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+      width: 16px;
+      height: 16px;
       will-change: transform;
       transform: translateZ(0);
       backface-visibility: hidden;
       opacity: 0;
       transition: opacity 0.3s;
+      font-size: 14px;
+      line-height: 16px;
+      text-align: center;
+      color: inherit;
     }
     .flow-dot.active {
       opacity: 1;
@@ -630,7 +650,7 @@
     /* ─── POWER STATS ROW ─── */
     .power-stats-row {
       grid-column: 1 / 4;
-      grid-row: 3;
+      grid-row: 4;
       display: grid;
       grid-template-columns: 1fr 2fr;
       gap: 20px;
@@ -703,19 +723,17 @@
     }
 
     /* ─── CHART ROW ─── */
-    .chart-row {
-      grid-column: 1 / 4;
-      grid-row: 4;
-    }
+    /* chart-row class unused now, chart is in left column */
 
     .chart-container {
       position: relative;
-      height: 160px;
+      height: 120px;
       width: 100%;
       background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
       border: 1px solid var(--glass-border);
       border-radius: 12px;
-      padding: 16px;
+      padding: 12px 16px;
+      margin: 0;
     }
 
     .chart-title {
@@ -1127,6 +1145,34 @@
           </div>
           <div class="battery-label" id="battery-soe-detail">Standby</div>
           <span id="battery-soe" style="display:none;">-- %</span>
+          <div class="pw-stats">
+            <div class="pw-stat-row">
+              <span class="pw-stat-label">Reserve</span>
+              <span class="pw-stat-value" id="pw-backup-reserve">--%</span>
+            </div>
+            <div class="pw-stat-row">
+              <span class="pw-stat-label">Capacity</span>
+              <span class="pw-stat-value"><span id="pw-energy-remaining">--</span> / <span id="pw-nominal-full">--</span> kWh</span>
+            </div>
+            <div class="pw-stat-row">
+              <span class="pw-stat-label">Max Power</span>
+              <span class="pw-stat-value"><span id="pw-max-power">--</span> kW</span>
+            </div>
+            <div class="pw-stat-row">
+              <span class="pw-stat-label">Mode</span>
+              <span class="pw-stat-value" id="pw-operation-mode">--</span>
+            </div>
+          </div>
+        </div>
+        <!-- Grid Status -->
+        <div class="stat-card" style="padding: 12px;">
+          <div class="stat-label">Grid Connection</div>
+          <div id="pw-grid-connected" style="font-size: 18px; font-weight: 700; margin: 4px 0;">--</div>
+        </div>
+        <!-- 24-HOUR CHART -->
+        <div class="chart-container">
+          <div class="chart-title">24-Hour Power History</div>
+          <canvas id="powerChart"></canvas>
         </div>
       </div>
 
@@ -1163,8 +1209,32 @@
         </div>
       </div>
 
-      <!-- RIGHT: Self-Powered Hero + Timers -->
+      <!-- RIGHT: Self-Powered Hero + Tesla + Timers -->
       <div style="display: flex; flex-direction: column; gap: 12px;">
+      <!-- Tesla Car -->
+      <div class="stat-card" id="tesla-card" style="padding: 12px;">
+        <div class="stat-label">🚗 Ohm</div>
+        <div style="display: flex; align-items: center; gap: 12px; margin: 6px 0;">
+          <div style="font-size: 28px; font-weight: 700; color: #64B5F6;" id="tesla-battery">--%</div>
+          <div style="font-size: 14px; color: var(--text-secondary);" id="tesla-range">-- mi</div>
+        </div>
+        <div class="battery-bar" style="height: 14px;">
+          <div class="battery-fill" id="tesla-battery-fill" style="width: 0%; background: linear-gradient(90deg, #64B5F6, rgba(100,181,246,0.6));">0%</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-secondary);">
+          <span id="tesla-charging-state">--</span>
+          <span id="tesla-locked">--</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
+          <span id="tesla-odometer">--</span>
+          <span id="tesla-sw">--</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
+          <span id="tesla-inside-temp">Inside: --</span>
+          <span id="tesla-outside-temp">Outside: --</span>
+        </div>
+      </div>
+
       <div class="hero-metric">
         <div class="metric-label">Self-Powered Today</div>
         <div class="metric-value" id="pw-self-powered">-- %</div>
@@ -1181,13 +1251,7 @@
       </div>
     </div>
 
-    <!-- ═══ 24-HOUR CHART ═══ -->
-    <div class="chart-row">
-      <div class="chart-container">
-        <div class="chart-title">24-Hour Power History</div>
-        <canvas id="powerChart"></canvas>
-      </div>
-    </div>
+    <!-- chart moved into middle-row left column -->
 
     <!-- ═══ BOTTOM BAR ═══ -->
     <div class="bottom">
@@ -1572,6 +1636,7 @@
             updatePowerwallUI('pw-solar', `${Math.max(0, data.solar.power)} W`);
             updatePowerwallUI('pw-load', `${data.load.power} W`);
             updateEnergyBreakdown(data);
+            updateSystemStats(data);
 
             // Pyramid values
             updatePowerwallUI('pyr-solar', `${solarKW} kW`);
@@ -1655,28 +1720,36 @@
       const mid = (a, b) => ({ x: (a.x+b.x)/2, y: (a.y+b.y)/2 });
 
       switch (flowName) {
-        case 'solar-home': from=solar; to=home; straight=true; break;
-        case 'solar-battery': from=solar; to=battery; cp={x:solar.x-40, y:mid(solar,battery).y}; break;
-        case 'solar-grid': from=solar; to=grid; cp={x:solar.x+40, y:mid(solar,grid).y}; break;
-        case 'battery-home': from=battery; to=home; cp={x:mid(battery,home).x-10, y:mid(battery,home).y-20}; break;
-        case 'grid-home': from=grid; to=home; cp={x:mid(grid,home).x+10, y:mid(grid,home).y-20}; break;
-        case 'grid-battery': from=grid; to=battery; straight=true; break;
+        case 'solar-home': from=home; to=solar; straight=true; break;
+        case 'solar-battery': from=battery; to=solar; cp={x:solar.x-40, y:mid(solar,battery).y}; break;
+        case 'solar-grid': from=grid; to=solar; cp={x:solar.x+40, y:mid(solar,grid).y}; break;
+        case 'battery-home': from=home; to=battery; cp={x:mid(battery,home).x-10, y:mid(battery,home).y-20}; break;
+        case 'grid-home': from=home; to=grid; cp={x:mid(grid,home).x+10, y:mid(grid,home).y-20}; break;
+        case 'grid-battery': from=battery; to=grid; straight=true; break;
+      }
+
+      // Calculate positions and tangent angles for arrow rotation
+      function getPos(t) {
+        if (straight) {
+          return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
+        }
+        const ab = { x: from.x+(cp.x-from.x)*t, y: from.y+(cp.y-from.y)*t };
+        const bc = { x: cp.x+(to.x-cp.x)*t, y: cp.y+(to.y-cp.y)*t };
+        return { x: ab.x + (bc.x - ab.x) * t, y: ab.y + (bc.y - ab.y) * t };
       }
 
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        let x, y;
-        if (straight) {
-          x = from.x + (to.x - from.x) * t;
-          y = from.y + (to.y - from.y) * t;
-        } else {
-          const ab = { x: from.x+(cp.x-from.x)*t, y: from.y+(cp.y-from.y)*t };
-          const bc = { x: cp.x+(to.x-cp.x)*t, y: cp.y+(to.y-cp.y)*t };
-          x = ab.x + (bc.x - ab.x) * t;
-          y = ab.y + (bc.y - ab.y) * t;
-        }
+        const pos = getPos(t);
+        // Calculate tangent angle from nearby points
+        const t2 = Math.min(1, t + 0.05);
+        const t1 = Math.max(0, t - 0.05);
+        const p1 = getPos(t1);
+        const p2 = getPos(t2);
+        // Angle points FROM source TO destination (reverse since keyframes are reversed)
+        const angle = Math.atan2(p1.y - p2.y, p1.x - p2.x) * 180 / Math.PI;
         const pct = Math.round(t * 100);
-        frames.push(`${pct}% { transform: translate(${x-4}px, ${y-4}px) translateZ(0); }`);
+        frames.push(`${pct}% { transform: translate(${pos.x-8}px, ${pos.y-8}px) rotate(${angle}deg) translateZ(0); }`);
       }
 
       return frames.join('\n');
@@ -1732,7 +1805,8 @@
         for (let i = 0; i < DOTS_PER_FLOW; i++) {
           const dot = document.createElement('div');
           dot.className = 'flow-dot';
-          dot.style.cssText = `background:${color}; animation: ${animName} 1.2s linear infinite; animation-delay: ${(i * 1.2 / DOTS_PER_FLOW).toFixed(2)}s;`;
+          dot.textContent = '►';
+          dot.style.cssText = `color:${color}; animation: ${animName} 1.2s linear infinite; animation-delay: ${(i * 1.2 / DOTS_PER_FLOW).toFixed(2)}s;`;
           overlay.appendChild(dot);
           flowDots[flowName].push(dot);
         }
@@ -1777,6 +1851,34 @@
         }
         if (flowLines[flow]) {
           flowLines[flow].classList.toggle('active', isActive);
+        }
+      }
+    }
+
+    function updateSystemStats(data) {
+      if (!data.system) return;
+      const s = data.system;
+      const el = (id) => document.getElementById(id);
+      
+      if (el('pw-backup-reserve')) el('pw-backup-reserve').textContent = `${s.backupReserve}%`;
+      if (el('pw-energy-remaining')) el('pw-energy-remaining').textContent = s.energyRemaining;
+      if (el('pw-nominal-full')) el('pw-nominal-full').textContent = s.nominalFull;
+      if (el('pw-max-power')) el('pw-max-power').textContent = s.maxDischargePower;
+      
+      const modeEl = el('pw-operation-mode');
+      if (modeEl) {
+        const modes = { self_consumption: 'Self-Powered', backup: 'Backup Only', autonomous: 'Time-Based' };
+        modeEl.textContent = modes[s.operationMode] || s.operationMode;
+      }
+      
+      const gridEl = el('pw-grid-connected');
+      if (gridEl) {
+        if (s.gridConnected) {
+          gridEl.textContent = '🟢 Connected';
+          gridEl.style.color = '#4caf50';
+        } else {
+          gridEl.textContent = '🔴 ISLANDED';
+          gridEl.style.color = '#ff6b6b';
         }
       }
     }
@@ -1842,6 +1944,7 @@
         document.getElementById('pw-solar').textContent = `${Math.max(0, data.solar.power)} W`;
         document.getElementById('pw-load').textContent = `${data.load.power} W`;
         updateEnergyBreakdown(data);
+        updateSystemStats(data);
 
         // Pyramid
         updatePowerwallUI('pyr-solar', `${solarKW} kW`);
@@ -1973,6 +2076,59 @@
     fetchWeather();
     fetchTemps();
     fetchCrypto();
+    // Tesla vehicle polling
+    async function fetchTesla() {
+      try {
+        const res = await fetch('/api/tesla/vehicle');
+        const d = await res.json();
+        if (d.state === 'asleep') {
+          document.getElementById('tesla-battery').textContent = '💤';
+          document.getElementById('tesla-range').textContent = 'Asleep';
+          document.getElementById('tesla-charging-state').textContent = '';
+          return;
+        }
+        if (d.state === 'unavailable') return;
+
+        if (d.battery != null) {
+          document.getElementById('tesla-battery').textContent = d.battery + '%';
+          document.getElementById('tesla-battery-fill').style.width = d.battery + '%';
+          document.getElementById('tesla-battery-fill').textContent = d.battery + '%';
+        }
+        if (d.range != null) document.getElementById('tesla-range').textContent = d.range + ' mi';
+        
+        const csEl = document.getElementById('tesla-charging-state');
+        if (d.chargingState === 'Charging') {
+          csEl.textContent = '⚡ Charging' + (d.timeToFullCharge ? ` (${d.timeToFullCharge}h left)` : '');
+          csEl.style.color = '#4caf50';
+        } else if (d.chargingState === 'Complete') {
+          csEl.textContent = '✅ Fully Charged';
+          csEl.style.color = '#4caf50';
+        } else {
+          csEl.textContent = d.chargingState || '--';
+          csEl.style.color = 'var(--text-secondary)';
+        }
+
+        document.getElementById('tesla-locked').textContent = d.locked ? '🔒 Locked' : '🔓 Unlocked';
+        if (d.odometer) document.getElementById('tesla-odometer').textContent = d.odometer.toLocaleString() + ' mi';
+        if (d.softwareVersion) document.getElementById('tesla-sw').textContent = 'v' + d.softwareVersion.split(' ')[0];
+        
+        if (d.insideTemp != null) {
+          const f = Math.round(d.insideTemp * 9/5 + 32);
+          document.getElementById('tesla-inside-temp').textContent = 'Inside: ' + f + '°';
+        }
+        if (d.outsideTemp != null) {
+          const f = Math.round(d.outsideTemp * 9/5 + 32);
+          document.getElementById('tesla-outside-temp').textContent = 'Outside: ' + f + '°';
+        }
+
+        if (d.speed != null) {
+          document.getElementById('tesla-range').textContent = d.speed + ' mph • ' + d.range + ' mi';
+        }
+      } catch (e) { console.error('Tesla fetch error:', e); }
+    }
+    fetchTesla();
+    setInterval(fetchTesla, 120000); // Every 2 minutes
+
     fetchPowerwall();
     startPowerwallStream();
 

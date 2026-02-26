@@ -725,6 +725,19 @@ async function fetchPowerwallData() {
     const agg = aggregatesRes.data;
     const soe = soeRes.data.percentage;
 
+    // Additional Powerwall stats
+    let systemStatus = {}, gridStatus = {}, operation = {};
+    try {
+      const [sysRes, gridRes, opRes] = await Promise.all([
+        axios.get(`${baseUrl}/api/system_status`, { headers: { Cookie: cookie }, httpsAgent: new https.Agent({ rejectUnauthorized: false }), timeout: 5000 }),
+        axios.get(`${baseUrl}/api/system_status/grid_status`, { headers: { Cookie: cookie }, httpsAgent: new https.Agent({ rejectUnauthorized: false }), timeout: 5000 }),
+        axios.get(`${baseUrl}/api/operation`, { headers: { Cookie: cookie }, httpsAgent: new https.Agent({ rejectUnauthorized: false }), timeout: 5000 }),
+      ]);
+      systemStatus = sysRes.data;
+      gridStatus = gridRes.data;
+      operation = opRes.data;
+    } catch (e) { console.error("[POWERWALL] Extra stats error:", e.message); }
+
     // Calculate self-powered percentage
     const solarPower = Math.round(agg.solar.instant_power);
     const batteryPower = Math.round(agg.battery.instant_power);
@@ -839,7 +852,18 @@ async function fetchPowerwallData() {
         energyExported: (agg.solar.energy_exported / 1e6).toFixed(1)
       },
       selfPoweredPercent: dailySelfPowered,
-      dailyBreakdown: dailyBreakdown
+      dailyBreakdown: dailyBreakdown,
+      system: {
+        gridConnected: gridStatus.grid_status === "SystemGridConnected",
+        gridServices: gridStatus.grid_services_active || false,
+        operationMode: operation.real_mode || "unknown",
+        backupReserve: operation.backup_reserve_percent || 0,
+        nominalFull: Math.round((systemStatus.nominal_full_pack_energy || 0) / 1000),
+        energyRemaining: Math.round((systemStatus.nominal_energy_remaining || 0) / 1000),
+        maxChargePower: Math.round((systemStatus.max_charge_power || 0) / 1000),
+        maxDischargePower: Math.round((systemStatus.max_discharge_power || 0) / 1000),
+        firmwareVersion: systemStatus.version || "unknown"
+      }
     };
 
     return powerwallData;
@@ -936,6 +960,95 @@ setInterval(async () => {
   }
 }, 10000);
 
+
+// ═══ Tesla Vehicle API ═══
+const TESLA_TOKENS_FILE = '/home/mark/MagicMirror/modules/MMM-Powerwall/tokens.json';
+const TESLA_VEHICLE_ID = 1492666792375909;
+let teslaCache = { data: null, lastUpdate: 0 };
+
+function getTeslaToken() {
+  try {
+    const tokens = JSON.parse(fs.readFileSync(TESLA_TOKENS_FILE, 'utf8'));
+    return tokens['mark@markkrieger.com'].access_token;
+  } catch (e) {
+    console.error('[TESLA] Token read error:', e.message);
+    return null;
+  }
+}
+
+async function fetchTeslaVehicle(wake = false) {
+  const token = getTeslaToken();
+  if (!token) return null;
+  const headers = { Authorization: 'Bearer ' + token };
+  const base = 'https://owner-api.teslamotors.com';
+
+  try {
+    if (wake) {
+      await axios.post(`${base}/api/1/vehicles/${TESLA_VEHICLE_ID}/wake_up`, {}, { headers, timeout: 10000 });
+      await new Promise(r => setTimeout(r, 8000));
+    }
+
+    const r = await axios.get(`${base}/api/1/vehicles/${TESLA_VEHICLE_ID}/vehicle_data`, { headers, timeout: 15000 });
+    const d = r.data.response;
+
+    const result = {
+      name: d.display_name || 'Tesla',
+      state: d.state,
+      vin: d.vin,
+      battery: d.charge_state?.battery_level,
+      range: d.charge_state?.battery_range ? Math.round(d.charge_state.battery_range) : null,
+      chargingState: d.charge_state?.charging_state,
+      chargeLimit: d.charge_state?.charge_limit_soc,
+      chargeRate: d.charge_state?.charge_rate,
+      timeToFullCharge: d.charge_state?.time_to_full_charge,
+      speed: d.drive_state?.speed,
+      latitude: d.drive_state?.latitude || d.drive_state?.active_route_latitude,
+      longitude: d.drive_state?.longitude || d.drive_state?.active_route_longitude,
+      heading: d.drive_state?.heading,
+      odometer: d.vehicle_state?.odometer ? Math.round(d.vehicle_state.odometer) : null,
+      locked: d.vehicle_state?.locked,
+      softwareVersion: d.vehicle_state?.car_version,
+      insideTemp: d.climate_state?.inside_temp,
+      outsideTemp: d.climate_state?.outside_temp,
+      isClimateOn: d.climate_state?.is_climate_on,
+      timestamp: new Date().toISOString()
+    };
+
+    teslaCache = { data: result, lastUpdate: Date.now() };
+    console.log('[TESLA] Vehicle data updated:', result.name, result.battery + '%');
+    return result;
+  } catch (e) {
+    if (e.response?.status === 408) {
+      console.log('[TESLA] Vehicle asleep');
+      return { state: 'asleep', name: 'Ohm', timestamp: new Date().toISOString() };
+    }
+    console.error('[TESLA] Fetch error:', e.response?.status || e.message);
+    return teslaCache.data;
+  }
+}
+
+app.get('/api/tesla/vehicle', async (req, res) => {
+  const now = Date.now();
+  // Cache for 2 minutes (don't wake car too often)
+  if (teslaCache.data && now - teslaCache.lastUpdate < 120000) {
+    return res.json(teslaCache.data);
+  }
+  const data = await fetchTeslaVehicle(false);
+  res.json(data || { state: 'unavailable' });
+});
+
+app.post('/api/tesla/wake', async (req, res) => {
+  const data = await fetchTeslaVehicle(true);
+  res.json(data || { state: 'unavailable' });
+});
+
+// Poll Tesla every 5 minutes (only wakes if car was recently driven)
+setInterval(async () => {
+  await fetchTeslaVehicle(false);
+}, 300000);
+
+// Initial fetch
+setTimeout(() => fetchTeslaVehicle(false), 10000);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎯 Wall Dashboard v5 (Alerts + Analytics) running on http://0.0.0.0:${PORT}`);
   console.log(`✨ Hot-reload enabled`);
