@@ -422,7 +422,7 @@
       display: grid;
       grid-template-columns: 1fr 1.5fr 1fr;
       gap: 20px;
-      align-items: stretch;
+      align-items: start;
     }
 
     /* Energy Pyramid */
@@ -430,13 +430,12 @@
       background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
       border: 1px solid var(--glass-border);
       border-radius: 16px;
-      padding: 24px;
+      padding: 16px 24px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       position: relative;
-      min-height: 220px;
     }
 
     .energy-section .section-title {
@@ -451,11 +450,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
+      position: relative;
     }
 
     .pyr-top {
       text-align: center;
+      margin-bottom: 36px;
     }
 
     .pyr-icon { font-size: 32px; }
@@ -479,9 +480,9 @@
     .pyr-value.grid { color: var(--accent-grid); text-shadow: 0 0 10px rgba(255,107,107,0.3); }
 
     .pyr-home {
-      font-size: 48px;
+      font-size: 36px;
       text-align: center;
-      margin: 4px 0;
+      margin: 0;
     }
 
     .pyr-bottom {
@@ -493,6 +494,49 @@
 
     .pyr-bottom .pyr-node {
       text-align: center;
+    }
+
+    /* Energy Flow Dots */
+    .flow-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .flow-dot {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      will-change: transform;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .flow-dot.active {
+      opacity: 1;
+    }
+    .flow-lines-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .flow-path {
+      fill: none;
+      stroke-width: 2;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .flow-path.active {
+      opacity: 0.3;
     }
 
     /* Crypto Card */
@@ -596,7 +640,7 @@
       background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
       border: 1px solid var(--glass-border);
       border-radius: 16px;
-      padding: 24px;
+      padding: 16px;
       text-align: center;
       display: flex;
       flex-direction: column;
@@ -1113,6 +1157,9 @@
               <div class="pyr-value grid" id="pyr-grid">0.0 kW</div>
             </div>
           </div>
+
+          <!-- Flow Animation Overlay -->
+          <div class="flow-overlay" id="flowOverlay"></div>
         </div>
       </div>
 
@@ -1530,6 +1577,7 @@
             updatePowerwallUI('pyr-solar', `${solarKW} kW`);
             updatePowerwallUI('pyr-battery', `${batteryKW} kW`);
             updatePowerwallUI('pyr-grid', `${displayGridKW} kW`);
+            updateEnergyFlows(data);
 
             const soe = Math.round(data.battery.soe);
             document.getElementById('battery-fill').style.width = `${soe}%`;
@@ -1562,6 +1610,174 @@
         el.textContent = value;
         el.style.animation = 'none';
         setTimeout(() => { el.style.animation = 'dataPulse 0.3s ease'; }, 10);
+      }
+    }
+
+    // ═══ GPU-Accelerated CSS Energy Flow Animation ═══
+    const FLOW_COLORS = {
+      'solar-home': '#FFD700',
+      'solar-battery': '#FFD700',
+      'solar-grid': '#FFD700',
+      'battery-home': '#4caf50',
+      'grid-home': '#ff6b6b',
+      'grid-battery': '#ff6b6b',
+    };
+    const DOTS_PER_FLOW = 4;
+    const flowDots = {};
+    const flowLines = {};
+    let flowActiveState = {};
+
+    function getNodePos(selector) {
+      const wrapper = document.querySelector('.pyramid-wrapper');
+      const el = typeof selector === 'string' ? wrapper.querySelector(selector) : selector;
+      if (!el || !wrapper) return null;
+      const wr = wrapper.getBoundingClientRect();
+      const er = el.getBoundingClientRect();
+      return { x: er.left + er.width / 2 - wr.left, y: er.top + er.height / 2 - wr.top };
+    }
+
+    function getEndpoints() {
+      const solar = getNodePos('.pyr-top .pyr-icon');
+      const home = getNodePos('.pyr-home');
+      const bNode = document.querySelector('.pyr-bottom .pyr-node:first-child .pyr-icon');
+      const gNode = document.querySelector('.pyr-bottom .pyr-node:last-child .pyr-icon');
+      const battery = getNodePos(bNode);
+      const grid = getNodePos(gNode);
+      return (solar && home && battery && grid) ? { solar, home, battery, grid } : null;
+    }
+
+    function buildFlowKeyframes(flowName, pts) {
+      const { solar, home, battery, grid } = pts;
+      const steps = 20;
+      const frames = [];
+
+      let from, to, cp, straight = false;
+      const mid = (a, b) => ({ x: (a.x+b.x)/2, y: (a.y+b.y)/2 });
+
+      switch (flowName) {
+        case 'solar-home': from=solar; to=home; straight=true; break;
+        case 'solar-battery': from=solar; to=battery; cp={x:solar.x-40, y:mid(solar,battery).y}; break;
+        case 'solar-grid': from=solar; to=grid; cp={x:solar.x+40, y:mid(solar,grid).y}; break;
+        case 'battery-home': from=battery; to=home; cp={x:mid(battery,home).x-10, y:mid(battery,home).y-20}; break;
+        case 'grid-home': from=grid; to=home; cp={x:mid(grid,home).x+10, y:mid(grid,home).y-20}; break;
+        case 'grid-battery': from=grid; to=battery; straight=true; break;
+      }
+
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        let x, y;
+        if (straight) {
+          x = from.x + (to.x - from.x) * t;
+          y = from.y + (to.y - from.y) * t;
+        } else {
+          const ab = { x: from.x+(cp.x-from.x)*t, y: from.y+(cp.y-from.y)*t };
+          const bc = { x: cp.x+(to.x-cp.x)*t, y: cp.y+(to.y-cp.y)*t };
+          x = ab.x + (bc.x - ab.x) * t;
+          y = ab.y + (bc.y - ab.y) * t;
+        }
+        const pct = Math.round(t * 100);
+        frames.push(`${pct}% { transform: translate(${x-4}px, ${y-4}px) translateZ(0); }`);
+      }
+
+      return frames.join('\n');
+    }
+
+    function setupFlowAnimations() {
+      const pts = getEndpoints();
+      if (!pts) return;
+
+      const overlay = document.getElementById('flowOverlay');
+      overlay.innerHTML = '';
+
+      // Build SVG for curved lines
+      const wrapper = document.querySelector('.pyramid-wrapper');
+      const wr = wrapper.getBoundingClientRect();
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'flow-lines-svg');
+      svg.setAttribute('viewBox', `0 0 ${wr.width} ${wr.height}`);
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+      const { solar, home, battery, grid } = pts;
+      const mid = (a, b) => ({ x: (a.x+b.x)/2, y: (a.y+b.y)/2 });
+
+      const pathDefs = {
+        'solar-home': `M ${solar.x} ${solar.y} L ${home.x} ${home.y}`,
+        'solar-battery': `M ${solar.x} ${solar.y} Q ${solar.x-40} ${mid(solar,battery).y} ${battery.x} ${battery.y}`,
+        'solar-grid': `M ${solar.x} ${solar.y} Q ${solar.x+40} ${mid(solar,grid).y} ${grid.x} ${grid.y}`,
+        'battery-home': `M ${battery.x} ${battery.y} Q ${mid(battery,home).x-10} ${mid(battery,home).y-20} ${home.x} ${home.y}`,
+        'grid-home': `M ${grid.x} ${grid.y} Q ${mid(grid,home).x+10} ${mid(grid,home).y-20} ${home.x} ${home.y}`,
+        'grid-battery': `M ${grid.x} ${grid.y} L ${battery.x} ${battery.y}`,
+      };
+
+      for (const [flowName, d] of Object.entries(pathDefs)) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('stroke', FLOW_COLORS[flowName]);
+        path.setAttribute('class', 'flow-path');
+        path.id = `fline-${flowName}`;
+        svg.appendChild(path);
+        flowLines[flowName] = path;
+      }
+      overlay.appendChild(svg);
+
+      // Build CSS keyframes and dot elements
+      let styleText = '';
+      for (const flowName of Object.keys(FLOW_COLORS)) {
+        const color = FLOW_COLORS[flowName];
+        const keyframes = buildFlowKeyframes(flowName, pts);
+        const animName = `flow-${flowName}`;
+        styleText += `@keyframes ${animName} { ${keyframes} }\n`;
+
+        flowDots[flowName] = [];
+        for (let i = 0; i < DOTS_PER_FLOW; i++) {
+          const dot = document.createElement('div');
+          dot.className = 'flow-dot';
+          dot.style.cssText = `background:${color}; animation: ${animName} 1.2s linear infinite; animation-delay: ${(i * 1.2 / DOTS_PER_FLOW).toFixed(2)}s;`;
+          overlay.appendChild(dot);
+          flowDots[flowName].push(dot);
+        }
+      }
+
+      // Inject keyframes stylesheet
+      let styleEl = document.getElementById('flow-keyframes');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'flow-keyframes';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = styleText;
+    }
+
+    // Setup on load and resize
+    setTimeout(setupFlowAnimations, 500);
+    window.addEventListener('resize', () => {
+      clearTimeout(window._flowResizeTimer);
+      window._flowResizeTimer = setTimeout(setupFlowAnimations, 300);
+    });
+
+    function updateEnergyFlows(data) {
+      const THRESHOLD = 50;
+      const solar = Math.max(0, data.solar.power);
+      const battery = data.battery.power;
+      const grid = data.grid.power;
+      const load = data.load.power;
+
+      const active = {
+        'solar-home': solar > THRESHOLD && load > THRESHOLD,
+        'solar-battery': solar > THRESHOLD && battery < -THRESHOLD,
+        'solar-grid': solar > THRESHOLD && grid < -THRESHOLD,
+        'battery-home': battery > THRESHOLD,
+        'grid-home': grid > THRESHOLD && load > THRESHOLD,
+        'grid-battery': grid > THRESHOLD && battery < -THRESHOLD,
+      };
+
+      for (const [flow, isActive] of Object.entries(active)) {
+        if (flowDots[flow]) {
+          flowDots[flow].forEach(d => d.classList.toggle('active', isActive));
+        }
+        if (flowLines[flow]) {
+          flowLines[flow].classList.toggle('active', isActive);
+        }
       }
     }
 
@@ -1631,6 +1847,7 @@
         updatePowerwallUI('pyr-solar', `${solarKW} kW`);
         updatePowerwallUI('pyr-battery', `${batteryKW} kW`);
         updatePowerwallUI('pyr-grid', `${displayGridKW} kW`);
+        updateEnergyFlows(data);
 
         const soe = Math.round(data.battery.soe);
         document.getElementById('battery-fill').style.width = `${soe}%`;
