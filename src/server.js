@@ -11,6 +11,7 @@ const path = require('path');
 const crypto = require('crypto');
 const chokidar = require('chokidar');
 const https = require('https');
+const Database = require("better-sqlite3");
 
 // Try to load suncalc for moon calculations, fallback if not available
 let SunCalc;
@@ -48,6 +49,7 @@ const HISTORY_FILE = path.join(DATA_DIR, 'powerwall-history.json');
 const ANALYTICS_FILE = path.join(DATA_DIR, 'powerwall-analytics.json');
 const ALERTS_FILE = path.join(DATA_DIR, 'alerts.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const BASELINES_FILE = path.join(DATA_DIR, "energy-baselines.json");
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
 
@@ -55,6 +57,44 @@ const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+
+// ═══ SQLite Energy History Database ═══
+const DB_PATH = path.join(DATA_DIR, "energy-history.db");
+const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+db.pragma("synchronous = NORMAL");
+
+// Power samples: every 30s poll
+db.exec(`CREATE TABLE IF NOT EXISTS power_samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL,
+  solar_w REAL,
+  battery_w REAL,
+  grid_w REAL,
+  load_w REAL,
+  battery_soe REAL,
+  battery_status TEXT
+)`);
+
+// Daily energy baselines: cumulative Wh snapshots at midnight
+db.exec(`CREATE TABLE IF NOT EXISTS daily_baselines (
+  date TEXT PRIMARY KEY,
+  solar_exported_wh REAL,
+  battery_exported_wh REAL,
+  battery_imported_wh REAL,
+  grid_imported_wh REAL,
+  grid_exported_wh REAL,
+  load_imported_wh REAL
+)`);
+
+// Indexes for fast queries
+db.exec(`CREATE INDEX IF NOT EXISTS idx_power_ts ON power_samples(ts)`);
+
+const insertSample = db.prepare(`INSERT INTO power_samples (ts, solar_w, battery_w, grid_w, load_w, battery_soe, battery_status) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+const insertBaseline = db.prepare(`INSERT OR REPLACE INTO daily_baselines (date, solar_exported_wh, battery_exported_wh, battery_imported_wh, grid_imported_wh, grid_exported_wh, load_imported_wh) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+const getBaseline = db.prepare(`SELECT * FROM daily_baselines WHERE date = ?`);
+
+console.log("[SQLITE] Energy history database initialized:", DB_PATH);
 
 // Load/initialize data files
 function loadJSON(file, defaultValue = {}) {
@@ -76,6 +116,7 @@ let timers = loadJSON(TIMERS_FILE, []);
 let history = loadJSON(HISTORY_FILE, []);
 let analytics = loadJSON(ANALYTICS_FILE, []);
 let alerts = loadJSON(ALERTS_FILE, []);
+let energyBaselines = loadJSON(BASELINES_FILE, {});
 let settings = loadJSON(SETTINGS_FILE, {
   theme: 'dark',
   timezone: 'America/New_York',
@@ -489,6 +530,19 @@ app.get('/api/admin/history', (req, res) => {
   res.json(filtered);
 });
 
+// SQLite-backed energy history
+app.get("/api/energy/history", (req, res) => {
+  const days = parseInt(req.query.days) || 1;
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+  const rows = db.prepare("SELECT * FROM power_samples WHERE ts > ? ORDER BY ts").all(cutoff);
+  res.json(rows);
+});
+
+app.get("/api/energy/daily", (req, res) => {
+  const rows = db.prepare("SELECT * FROM daily_baselines ORDER BY date DESC LIMIT 90").all();
+  res.json(rows);
+});
+
 // ─────────────────────────────────────
 // Dashboard API Routes
 // ─────────────────────────────────────
@@ -700,6 +754,60 @@ async function fetchPowerwallData() {
       batteryStatus = 'standby';
     }
 
+    // Calculate DAILY energy breakdown from cumulative Wh baselines
+    const cumSolar = agg.solar.energy_exported;
+    const cumBatteryOut = agg.battery.energy_exported;
+    const cumBatteryIn = agg.battery.energy_imported;
+    const cumGridIn = agg.site.energy_imported;
+    const cumGridOut = agg.site.energy_exported;
+    const cumLoad = agg.load.energy_imported;
+
+    // Track midnight baselines in SQLite
+    const todayKey = new Date().toISOString().slice(0, 10);
+    let baseline = getBaseline.get(todayKey);
+    if (!baseline) {
+      insertBaseline.run(todayKey, cumSolar, cumBatteryOut, cumBatteryIn, cumGridIn, cumGridOut, cumLoad);
+      baseline = getBaseline.get(todayKey);
+      console.log("[SQLITE] New daily baseline set for", todayKey);
+    }
+
+    const daySolar = Math.max(0, cumSolar - (baseline.solar_exported_wh || 0));
+    const dayBattery = Math.max(0, cumBatteryOut - (baseline.battery_exported_wh || 0));
+    const dayGrid = Math.max(0, cumGridIn - (baseline.grid_imported_wh || 0));
+    const dayLoad = Math.max(0, cumLoad - (baseline.load_imported_wh || 0));
+
+    let dailySelfPowered = selfPoweredPercent;
+    let dailyBreakdown = { solarPct: 0, batteryPct: 0, gridPct: 0, solarKwh: 0, batteryKwh: 0, gridKwh: 0, loadKwh: 0 };
+    if (dayLoad > 0) {
+      dailyBreakdown.solarPct = Math.round((daySolar / dayLoad) * 100);
+      dailyBreakdown.batteryPct = Math.round((dayBattery / dayLoad) * 100);
+      dailyBreakdown.gridPct = Math.round((dayGrid / dayLoad) * 100);
+      dailyBreakdown.solarKwh = (daySolar / 1e6).toFixed(1);
+      dailyBreakdown.batteryKwh = (dayBattery / 1e6).toFixed(1);
+      dailyBreakdown.gridKwh = (dayGrid / 1e6).toFixed(1);
+      dailyBreakdown.loadKwh = (dayLoad / 1e6).toFixed(1);
+      dailySelfPowered = Math.round(((daySolar + dayBattery) / dayLoad) * 100);
+      dailySelfPowered = Math.max(0, Math.min(100, dailySelfPowered));
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     const powerwallData = {
       timestamp: new Date().toISOString(),
       grid: {
@@ -730,7 +838,8 @@ async function fetchPowerwallData() {
         voltage: agg.solar.instant_average_voltage,
         energyExported: (agg.solar.energy_exported / 1e6).toFixed(1)
       },
-      selfPoweredPercent: selfPoweredPercent
+      selfPoweredPercent: dailySelfPowered,
+      dailyBreakdown: dailyBreakdown
     };
 
     return powerwallData;
@@ -767,6 +876,11 @@ app.get('/api/powerwall', async (req, res) => {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     history = history.filter(h => new Date(h.timestamp).getTime() > cutoff);
     saveJSON(HISTORY_FILE, history);
+
+    // Log to SQLite
+    try {
+      console.log("[SQLITE] Inserting sample..."); insertSample.run(powerwallData.timestamp, powerwallData.solar.power, powerwallData.battery.power, powerwallData.grid.power, powerwallData.load.power, powerwallData.battery.soe, powerwallData.battery.status);
+    } catch (e) { console.error("[SQLITE] Insert error:", e.message); }
 
     // Check alerts
     const tempsData = cachedData.temps;
@@ -811,6 +925,9 @@ setInterval(async () => {
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
       history = history.filter(h => new Date(h.timestamp).getTime() > cutoff);
       
+      saveJSON(HISTORY_FILE, history);
+      // Log to SQLite
+      try { insertSample.run(data.timestamp, data.solar.power, data.battery.power, data.grid.power, data.load.power, data.battery.soe, data.battery.status); } catch(e) { console.error("[SQLITE] Insert error:", e.message); }
       // Check for alerts
       checkAlerts(data, cachedData.temps);
       
@@ -831,5 +948,28 @@ app.listen(PORT, '0.0.0.0', () => {
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down gracefully...');
   watcher.close();
+  db.close();
+  console.log("[SQLITE] Database closed.");
   process.exit(0);
+});
+
+// Force refresh endpoint (for remote refreshing wall displays)
+app.post('/api/force-refresh', (req, res) => {
+  console.log('[REFRESH] 🔄 Force refresh triggered from API');
+  
+  // Update code version to trigger browser refresh
+  codeVersion.changed = true;
+  codeVersion.hash = Date.now().toString(36);
+  codeVersion.timestamp = new Date().toISOString();
+  
+  // Broadcast to all SSE clients
+  ssClients.forEach(client => {
+    client.write('data: {"command": "refresh"}\n\n');
+  });
+  
+  res.json({ 
+    success: true, 
+    message: 'Refresh command sent to all clients',
+    clientsNotified: ssClients.length
+  });
 });
