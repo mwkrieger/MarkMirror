@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wall Dashboard</title>
   <script>
@@ -320,9 +321,11 @@
     }
 
     .weather-summary {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text-secondary);
-      text-align: center;
+      text-align: left;
+      line-height: 1.4;
+      padding: 8px 0;
     }
 
     /* ─── TOP RIGHT: Hero Metric ─── */
@@ -745,12 +748,47 @@
       letter-spacing: 1px;
     }
 
-    /* ─── BOTTOM BAR ─── */
+    
+    /* ─── FUN CARDS ROW ─── */
+    .fun-row {
+      grid-column: 1 / 4;
+      grid-row: 6;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      padding: 0 20px;
+      margin-bottom: 20px;
+    }
+    .fun-card {
+      background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .fun-card h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-secondary);
+      margin: 0 0 12px 0;
+    }
+    .word-of-day-word { font-size: 28px; font-weight: 700; color: #CE93D8; margin-bottom: 4px; }
+    .word-of-day-phonetic { font-size: 13px; color: var(--text-secondary); font-style: italic; margin-bottom: 8px; }
+    .word-of-day-pos { font-size: 11px; color: #CE93D8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .word-of-day-def { font-size: 15px; color: var(--text-primary); line-height: 1.4; }
+    .dad-joke-text { font-size: 18px; color: var(--text-primary); line-height: 1.5; font-style: italic; }
+    .history-event { margin-bottom: 10px; }
+    .history-year { font-size: 14px; font-weight: 700; color: #FFB74D; margin-right: 6px; }
+    .history-text { font-size: 14px; color: var(--text-primary); line-height: 1.4; }
+
+/* ─── BOTTOM BAR ─── */
     .bottom {
       grid-column: 1 / 4;
       grid-row: 5;
-      border-top: 1px solid rgba(255,255,255,0.05);
-      padding-top: 12px;
+      border-top: none;
+      padding-top: 0;
       font-size: 0.85rem;
       color: var(--text-tertiary);
       display: flex;
@@ -772,6 +810,48 @@
       color: var(--text-primary);
     }
 
+    .news-ticker-wrapper {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      overflow: hidden;
+      height: 80px;
+      background: rgba(10,10,10,0.9);
+      border-top: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 20px;
+      z-index: 100;
+    }
+    .news-headline {
+      font-size: 28px;
+      text-align: center;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      line-height: 1.3;
+      width: 100%;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+    .news-headline.fade-out { opacity: 0; }
+    .news-headline-source {
+      color: var(--accent-solar);
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      margin-right: 10px;
+    }
+    .news-headline-title {
+      color: var(--text-primary);
+    }
+    .news-headline-time {
+      color: rgba(255,255,255,0.3);
+      font-size: 13px;
+      margin-left: 10px;
+    }
     .news {
       flex: 1;
       display: flex;
@@ -1086,6 +1166,19 @@
         </div>
       </div>
 
+      <!-- Garage & Alarm -->
+      <div class="stat-card" style="padding: 10px 12px; margin-top: 10px;">
+        <div style="font-size: 13px; display: flex; align-items: center; gap: 8px;">
+          <span>🏠</span>
+          <span id="garage-doors" style="color: var(--text-secondary);">Garage: --</span>
+        </div>
+        <div style="font-size: 13px; display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+          <span>🛡️</span>
+          <span id="alarm-status" style="color: var(--text-secondary);">Alarm: --</span>
+        </div>
+        <div id="alarm-open-sensors" style="font-size: 11px; color: #f44336; margin-top: 4px;"></div>
+      </div>
+
     </div>
 
     <!-- ═══ TOP MIDDLE: Weather & Forecast ═══ -->
@@ -1107,6 +1200,23 @@
       <div class="weather-summary" id="weather-summary">
         Loading weather...
       </div>
+
+      <div style="display: flex; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div style="flex: 1;">
+          <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">🌬️ Air Quality</div>
+          <div style="display: flex; align-items: baseline; gap: 6px;">
+            <span style="font-size: 16px; font-weight: 700;" id="aqi-value">--</span>
+            <span style="font-size: 11px; color: var(--text-secondary);" id="aqi-label">--</span>
+          </div>
+          <div style="font-size: 10px; color: var(--text-secondary); margin-top: 2px;">
+            PM2.5: <span id="aqi-pm25">--</span> · O₃: <span id="aqi-o3">--</span>
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">🌾 Pollen</div>
+          <div id="pollen-data" style="font-size: 12px;">--</div>
+        </div>
+      </div>
     </div>
 
     <!-- ═══ TOP RIGHT: Self-Powered Hero ═══ -->
@@ -1127,6 +1237,17 @@
         </div>
       </div>
       <div class="timers-section" id="timers-display"></div>
+
+      <!-- Commute -->
+      <div class="stat-card" style="padding: 12px; margin-top: 12px;">
+        <div class="stat-label">🚗 Commute to NYC</div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin: 6px 0;">
+          <div style="font-size: 24px; font-weight: 700; color: #64B5F6;" id="commute-time">--</div>
+          <div style="font-size: 12px; color: var(--text-secondary);" id="commute-distance">-- mi</div>
+          <div style="font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 2px;" id="commute-via"></div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ═══ MIDDLE ROW: Power Stats + Energy Pyramid + Self-Powered ═══ -->
@@ -1207,45 +1328,67 @@
           <!-- Flow Animation Overlay -->
           <div class="flow-overlay" id="flowOverlay"></div>
         </div>
+        <div class="hero-metric" style="margin-top: 16px;">
+          <div class="metric-label">Self-Powered Today</div>
+          <div class="metric-value" id="pw-self-powered">-- %</div>
+          <div class="energy-breakdown">
+            <div class="breakdown-row"><span class="breakdown-icon">☀️</span> Solar <span class="breakdown-kwh" id="bp-solar-kwh"></span><span class="breakdown-pct" id="bp-solar">--%</span></div>
+            <div class="breakdown-row"><span class="breakdown-icon">🔋</span> Battery <span class="breakdown-kwh" id="bp-battery-kwh"></span><span class="breakdown-pct" id="bp-battery">--%</span></div>
+            <div class="breakdown-row"><span class="breakdown-icon">⚡</span> Grid <span class="breakdown-kwh" id="bp-grid-kwh"></span><span class="breakdown-pct" id="bp-grid">--%</span></div>
+          </div>
+          <div class="metric-status">
+            <div id="battery-status">Standby</div>
+            <div id="grid-status">Grid: --</div>
+          </div>
+        </div>
       </div>
 
-      <!-- RIGHT: Self-Powered Hero + Tesla + Timers -->
+      <!-- RIGHT: Cars -->
       <div style="display: flex; flex-direction: column; gap: 12px;">
       <!-- Tesla Car -->
+
       <div class="stat-card" id="tesla-card" style="padding: 12px;">
-        <div class="stat-label">🚗 Ohm</div>
+        <div class="stat-label">🚗 Ohm <span id="tesla-sleep" style="display:none; font-size:10px; opacity:0.6;">💤</span></div>
         <div style="display: flex; align-items: center; gap: 12px; margin: 6px 0;">
           <div style="font-size: 28px; font-weight: 700; color: #64B5F6;" id="tesla-battery">--%</div>
           <div style="font-size: 14px; color: var(--text-secondary);" id="tesla-range">-- mi</div>
         </div>
-        <div class="battery-bar" style="height: 14px;">
-          <div class="battery-fill" id="tesla-battery-fill" style="width: 0%; background: linear-gradient(90deg, #64B5F6, rgba(100,181,246,0.6));">0%</div>
-        </div>
+
         <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-secondary);">
-          <span id="tesla-charging-state">--</span>
           <span id="tesla-locked">--</span>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
           <span id="tesla-odometer">--</span>
-          <span id="tesla-sw">--</span>
+          <span style="margin-left: 16px;" id="tesla-sw">--</span>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
           <span id="tesla-inside-temp">Inside: --</span>
           <span id="tesla-outside-temp">Outside: --</span>
         </div>
+        <div style="margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
+          <span id="tesla-location">📍 --</span>
+        </div>
       </div>
 
-      <div class="hero-metric">
-        <div class="metric-label">Self-Powered Today</div>
-        <div class="metric-value" id="pw-self-powered">-- %</div>
-        <div class="energy-breakdown">
-          <div class="breakdown-row"><span class="breakdown-icon">☀️</span> Solar <span class="breakdown-kwh" id="bp-solar-kwh"></span><span class="breakdown-pct" id="bp-solar">--%</span></div>
-          <div class="breakdown-row"><span class="breakdown-icon">🔋</span> Battery <span class="breakdown-kwh" id="bp-battery-kwh"></span><span class="breakdown-pct" id="bp-battery">--%</span></div>
-          <div class="breakdown-row"><span class="breakdown-icon">⚡</span> Grid <span class="breakdown-kwh" id="bp-grid-kwh"></span><span class="breakdown-pct" id="bp-grid">--%</span></div>
+      <div class="stat-card" id="rivian-card" style="padding: 12px;">
+        <div class="stat-label">🛻 BBT <span id="rivian-sleep" style="display:none; font-size:10px; opacity:0.6;">💤</span></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin: 6px 0;">
+          <div style="font-size: 28px; font-weight: 700; color: #B8E986;" id="rivian-battery">--%</div>
+          <div style="font-size: 14px; color: var(--text-secondary);" id="rivian-range">-- mi</div>
         </div>
-        <div class="metric-status">
-          <div id="battery-status">Standby</div>
-          <div id="grid-status">Grid: --</div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-secondary);">
+          <span id="rivian-locked">--</span>
+          <span id="rivian-charging-state">--</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
+          <span id="rivian-odometer">--</span>
+          <span style="margin-left: 16px;" id="rivian-sw">--</span>
+        </div>
+        <div style="margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
+          <span id="rivian-inside-temp">Inside: --</span>
+        </div>
+        <div style="margin-top: 4px; font-size: 11px; color: var(--text-secondary);">
+          <span id="rivian-location">📍 --</span>
         </div>
       </div>
       </div>
@@ -1253,15 +1396,33 @@
 
     <!-- chart moved into middle-row left column -->
 
-    <!-- ═══ BOTTOM BAR ═══ -->
-    <div class="bottom">
-      <div class="news">
-        <span class="news-source">TECHCRUNCH, 19 minutes ago:</span>
-        <span class="news-text" id="news">Loading news...</span>
+    
+    <!-- ═══ FUN CARDS ROW ═══ -->
+    <div class="fun-row">
+      <div class="fun-card">
+        <h3>📖 Word of the Day</h3>
+        <div class="word-of-day-word" id="wotd-word">--</div>
+        <div class="word-of-day-phonetic" id="wotd-phonetic"></div>
+        <div class="word-of-day-pos" id="wotd-pos"></div>
+        <div class="word-of-day-def" id="wotd-def"></div>
       </div>
+      <div class="fun-card">
+        <h3>🤣 Dad Joke</h3>
+        <div class="dad-joke-text" id="dad-joke">Loading...</div>
+      </div>
+      <div class="fun-card">
+        <h3>📜 Today in History</h3>
+        <div id="today-history"></div>
+      </div>
+    </div>
 
-      <div style="text-align: right; font-size: 11px; color: var(--text-secondary);">
-        Last updated: <span id="lastUpdate" style="font-weight: 600;">--:--</span>
+<!-- ═══ BOTTOM BAR ═══ -->
+    <div class="bottom">
+      <div class="news-ticker-wrapper">
+        <div class="news-headline" id="news-headline">
+          <span class="news-headline-source">NEWS</span>
+          <span class="news-headline-title">Loading headlines...</span>
+        </div>
       </div>
     </div>
 
@@ -1341,7 +1502,7 @@
       document.getElementById('adminModal').classList.toggle('active');
       loadTimers();
       const ts = new Date().toLocaleTimeString();
-      document.getElementById('lastUpdate').textContent = ts;
+      // lastUpdate removed
       const lu2 = document.getElementById('lastUpdate2');
       if (lu2) lu2.textContent = ts;
     }
@@ -1534,12 +1695,26 @@
           const days = data.dailyForecast.slice(0, 5);
           const existingItems = forecastGrid.querySelectorAll('.forecast-item');
 
+          // Weather icon mapper
+          function weatherIcon(desc, icon) {
+            const d = (desc || '').toLowerCase();
+            if (d.includes('snow') || d.includes('sleet')) return '🌨️';
+            if (d.includes('thunder')) return '⛈️';
+            if (d.includes('rain') || d.includes('drizzle')) return '🌧️';
+            if (d.includes('mist') || d.includes('fog') || d.includes('haze')) return '🌫️';
+            if (d.includes('cloud') || d.includes('overcast')) return '☁️';
+            if (icon && icon.startsWith('02')) return '⛅';
+            return '☀️';
+          }
+
           days.forEach((day, i) => {
             const dayName = i < 2 ? dayNames[i] :
               new Date(day.date || Date.now() + i * 86400000).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+            const icon = weatherIcon(day.description, day.icon);
 
             if (existingItems[i]) {
               existingItems[i].querySelector('.forecast-day').textContent = dayName;
+              existingItems[i].querySelector('.forecast-icon').textContent = icon;
               existingItems[i].querySelector('.forecast-high').textContent = `${day.high}°`;
               existingItems[i].querySelector('.forecast-low').textContent = `${day.low}°`;
             } else {
@@ -1547,6 +1722,7 @@
               item.className = 'forecast-item';
               item.innerHTML = `
                 <div class="forecast-day">${dayName}</div>
+                <div class="forecast-icon" style="font-size: 20px; margin: 2px 0;">${icon}</div>
                 <div class="forecast-temps">
                   <div class="forecast-high">${day.high}°</div>
                   <div class="forecast-low">${day.low}°</div>
@@ -1557,12 +1733,76 @@
           });
         }
 
-        document.getElementById('weather-summary').textContent =
-          `${data.current.description}, ${data.current.temp}° — Feels like ${data.current.feelsLike}°`;
+        // Build fun weather summary
+        const temp = data.current.temp;
+        const feels = data.current.feelsLike;
+        const desc = (data.current.description || '').toLowerCase();
+        const forecast = data.dailyForecast || [];
+
+        let summary = '';
+
+        // Current conditions - fun opener
+        if (temp < 25) summary = `Brrr! ${temp}° out there — basically Antarctica. 🥶`;
+        else if (temp < 40) summary = `A crispy ${temp}° — your nose hairs will freeze on contact. ❄️`;
+        else if (temp < 55) summary = `${temp}° and chilly — jacket weather, no debate. 🧥`;
+        else if (temp < 70) summary = `A pleasant ${temp}° — Mother Nature's being reasonable for once. 😊`;
+        else if (temp < 80) summary = `${temp}° and gorgeous — go outside, you beautiful human! ☀️`;
+        else if (temp < 90) summary = `${temp}° — summer vibes! Stay hydrated out there. 🌊`;
+        else summary = `${temp}°?! It's basically a pizza oven. Stay inside. 🔥`;
+
+        // Feels like commentary
+        if (Math.abs(temp - feels) > 8) {
+          summary += ` Feels like ${feels}° though — ${feels < temp ? "wind is no joke" : "humidity doing its thing"}.`;
+        }
+
+        // Sky conditions
+        if (desc.includes('rain') || desc.includes('drizzle')) summary += ' ☔ Grab an umbrella!';
+        else if (desc.includes('snow')) summary += ' 🌨️ Snow day energy!';
+        else if (desc.includes('cloud')) summary += ' ☁️ Cloudy vibes.';
+        else if (desc.includes('clear')) summary += ' Clear skies — chef\'s kiss. 👨‍🍳';
+        else if (desc.includes('fog') || desc.includes('mist')) summary += ' 🌫️ Foggy — drive careful!';
+
+        // Week forecast summary
+        if (forecast.length >= 2) {
+          const tmrw = forecast[1];
+          if (tmrw) {
+            const tmrwHigh = tmrw.high;
+            const tmrwDesc = (tmrw.description || '').toLowerCase();
+            if (tmrwHigh > temp + 10) summary += ` Tomorrow warms up to ${tmrwHigh}° — things are looking up!`;
+            else if (tmrwHigh < temp - 10) summary += ` Tomorrow drops to ${tmrwHigh}° — bundle up extra.`;
+            else summary += ` Tomorrow: ${tmrwHigh}°, more of the same.`;
+
+            if (tmrwDesc.includes('rain')) summary += ' ☔ Pack an umbrella.';
+            else if (tmrwDesc.includes('snow')) summary += ' 🌨️ Snow incoming!';
+          }
+        }
+
+        // Week trend
+        if (forecast.length >= 4) {
+          const highs = forecast.slice(1).map(d => d.high);
+          const maxHigh = Math.max(...highs);
+          const minHigh = Math.min(...highs);
+          const hasRain = forecast.slice(1).some(d => (d.description || '').toLowerCase().includes('rain'));
+          const hasSnow = forecast.slice(1).some(d => (d.description || '').toLowerCase().includes('snow'));
+
+          if (maxHigh - minHigh > 20) {
+            summary += ` Wild week ahead — swinging from ${minHigh}° to ${maxHigh}°. Dress in layers! 🎢`;
+          } else if (maxHigh <= 32) {
+            summary += ` Freezing all week (${minHigh}°–${maxHigh}°). Winter is not messing around. 🧊`;
+          } else if (minHigh >= 70) {
+            summary += ` Warm week ahead (${minHigh}°–${maxHigh}°). Living the dream! 🌴`;
+          }
+
+          if (hasSnow) summary += ' ❄️ Snow in the forecast this week!';
+          else if (hasRain) summary += ' 🌂 Some rain this week — keep an umbrella handy.';
+        }
+
+        document.getElementById('weather-summary').textContent = summary;
 
         document.getElementById('weather-card').classList.remove('loading');
       } catch (error) {
         console.error('Weather error:', error);
+        document.getElementById('weather-card').classList.remove('loading');
       }
     }
 
@@ -2081,34 +2321,19 @@
       try {
         const res = await fetch('/api/tesla/vehicle');
         const d = await res.json();
-        if (d.state === 'asleep') {
-          document.getElementById('tesla-battery').textContent = '💤';
-          document.getElementById('tesla-range').textContent = 'Asleep';
-          document.getElementById('tesla-charging-state').textContent = '';
-          return;
-        }
-        if (d.state === 'unavailable') return;
+        if (d.state === 'unavailable' && !d.battery) return;
+
+        const isAsleep = d.state === 'asleep';
+        const card = document.getElementById('tesla-card');
+        card.style.opacity = isAsleep ? '0.7' : '1';
+        document.getElementById('tesla-sleep').style.display = isAsleep ? 'inline' : 'none';
 
         if (d.battery != null) {
           document.getElementById('tesla-battery').textContent = d.battery + '%';
-          document.getElementById('tesla-battery-fill').style.width = d.battery + '%';
-          document.getElementById('tesla-battery-fill').textContent = d.battery + '%';
         }
         if (d.range != null) document.getElementById('tesla-range').textContent = d.range + ' mi';
-        
-        const csEl = document.getElementById('tesla-charging-state');
-        if (d.chargingState === 'Charging') {
-          csEl.textContent = '⚡ Charging' + (d.timeToFullCharge ? ` (${d.timeToFullCharge}h left)` : '');
-          csEl.style.color = '#4caf50';
-        } else if (d.chargingState === 'Complete') {
-          csEl.textContent = '✅ Fully Charged';
-          csEl.style.color = '#4caf50';
-        } else {
-          csEl.textContent = d.chargingState || '--';
-          csEl.style.color = 'var(--text-secondary)';
-        }
 
-        document.getElementById('tesla-locked').textContent = d.locked ? '🔒 Locked' : '🔓 Unlocked';
+        document.getElementById('tesla-locked').textContent = d.locked ? '🔒 Locked' : (d.locked === false ? '🔓 Unlocked' : '--');
         if (d.odometer) document.getElementById('tesla-odometer').textContent = d.odometer.toLocaleString() + ' mi';
         if (d.softwareVersion) document.getElementById('tesla-sw').textContent = 'v' + d.softwareVersion.split(' ')[0];
         
@@ -2121,13 +2346,159 @@
           document.getElementById('tesla-outside-temp').textContent = 'Outside: ' + f + '°';
         }
 
-        if (d.speed != null) {
+        if (d.speed != null && d.speed > 0) {
           document.getElementById('tesla-range').textContent = d.speed + ' mph • ' + d.range + ' mi';
         }
+        if (d.location) document.getElementById('tesla-location').textContent = '📍 ' + d.location;
       } catch (e) { console.error('Tesla fetch error:', e); }
     }
     fetchTesla();
     setInterval(fetchTesla, 120000); // Every 2 minutes
+
+    // ═══ Rivian ═══
+    async function fetchRivian() {
+      try {
+        const res = await fetch('/api/rivian/vehicle');
+        const d = await res.json();
+        if (d.state === 'unavailable' && !d.battery) return;
+
+        const rivIsAsleep = d.state === 'sleep' || d.state === 'standby';
+        const rivCard = document.getElementById('rivian-card');
+        rivCard.style.opacity = rivIsAsleep ? '0.7' : '1';
+        document.getElementById('rivian-sleep').style.display = rivIsAsleep ? 'inline' : 'none';
+
+        if (d.battery != null) {
+          document.getElementById('rivian-battery').textContent = d.battery + '%';
+        }
+        if (d.range != null) document.getElementById('rivian-range').textContent = d.range + ' mi';
+
+        const csEl = document.getElementById('rivian-charging-state');
+        if (d.chargingState === 'Charging') {
+          csEl.textContent = '⚡ ' + (d.timeToFullCharge ? d.timeToFullCharge + ' min left' : 'Charging');
+          csEl.style.color = '#4caf50';
+        } else if (d.chargingState === 'Complete') {
+          csEl.textContent = '✅ Full';
+          csEl.style.color = '#4caf50';
+        } else {
+          csEl.textContent = d.chargingState || '--';
+          csEl.style.color = 'var(--text-secondary)';
+        }
+
+        document.getElementById('rivian-locked').textContent = d.locked ? '🔒 Locked' : (d.locked === false ? '🔓 Unlocked' : '--');
+        if (d.odometer) document.getElementById('rivian-odometer').textContent = d.odometer.toLocaleString() + ' mi';
+        if (d.softwareVersion) document.getElementById('rivian-sw').textContent = 'v' + d.softwareVersion;
+
+        if (d.insideTemp != null) {
+          const f = Math.round(d.insideTemp * 9/5 + 32);
+          document.getElementById('rivian-inside-temp').textContent = 'Inside: ' + f + '°';
+        }
+
+        if (d.speed != null && d.speed > 0) {
+          document.getElementById('rivian-range').textContent = d.speed + ' mph • ' + d.range + ' mi';
+        }
+        if (d.location) document.getElementById('rivian-location').textContent = '📍 ' + d.location;
+      } catch (e) { console.error('Rivian fetch error:', e); }
+    }
+    fetchRivian();
+    setInterval(fetchRivian, 120000);
+
+    // ═══ Air Quality ═══
+    async function fetchAirQuality() {
+      try {
+        const res = await fetch('/api/airquality');
+        const d = await res.json();
+        if (d.aqi) {
+          const el = document.getElementById('aqi-value');
+          el.textContent = d.aqi + '/5';
+          el.style.color = d.color || '#fff';
+          document.getElementById('aqi-label').textContent = d.label;
+          document.getElementById('aqi-pm25').textContent = d.pm25;
+          document.getElementById('aqi-pm10').textContent = d.pm10;
+          document.getElementById('aqi-o3').textContent = d.o3;
+        }
+      } catch (e) { console.error('AQI error:', e); }
+    }
+    fetchAirQuality();
+    setInterval(fetchAirQuality, 1800000); // Every 30 min
+
+    // ═══ Garage Door ═══
+    async function fetchGarage() {
+      try {
+        const res = await fetch('/api/garage');
+        const d = await res.json();
+        const container = document.getElementById('garage-doors');
+        if (d.doors && d.doors.length > 0) {
+          const door = d.doors[0];
+          const icon = door.status === 'closed' ? '🔒' : '🔓';
+          const color = door.status === 'closed' ? '#4caf50' : '#f44336';
+          const label = door.status.charAt(0).toUpperCase() + door.status.slice(1);
+          container.innerHTML = `Garage: <span style="color:${color};font-weight:600;">${icon} ${label}</span>`;
+        }
+      } catch (e) { console.error('Garage error:', e); }
+    }
+    fetchGarage();
+    setInterval(fetchGarage, 30000); // Every 30 sec
+
+    // ═══ Alarm.com ═══
+    async function fetchAlarm() {
+      try {
+        const res = await fetch('/api/alarm');
+        const d = await res.json();
+        const el = document.getElementById('alarm-status');
+        if (d.panel && d.panel !== '--') {
+          const armed = d.panelState > 1;
+          const color = d.hasAlarm ? '#f44336' : armed ? '#4caf50' : '#ff9800';
+          const icon = d.hasAlarm ? '🚨' : armed ? '🔒' : '🔓';
+          el.innerHTML = `Alarm: <span style="color:${color};font-weight:600;">${icon} ${d.panel}</span>`;
+        }
+        const openEl = document.getElementById('alarm-open-sensors');
+        if (d.openSensors && d.openSensors.length > 0) {
+          openEl.textContent = '⚠️ Open: ' + d.openSensors.map(s => s.name).join(', ');
+        } else {
+          openEl.textContent = '';
+        }
+      } catch (e) { console.error('Alarm error:', e); }
+    }
+    fetchAlarm();
+    setInterval(fetchAlarm, 60000); // Every 60 sec
+
+    // ═══ Commute ═══
+    async function fetchCommute() {
+      try {
+        const res = await fetch('/api/commute');
+        const d = await res.json();
+        if (d.duration) {
+          document.getElementById('commute-time').textContent = d.duration;
+          const color = d.durationMin <= 120 ? '#4caf50' : d.durationMin <= 150 ? '#ff9800' : '#f44336';
+          document.getElementById('commute-time').style.color = color;
+        }
+        if (d.distanceMi) document.getElementById('commute-distance').textContent = d.distanceMi + ' mi';
+        if (d.via) document.getElementById('commute-via').textContent = 'via ' + d.via;
+      } catch (e) { console.error('Commute error:', e); }
+    }
+    fetchCommute();
+    setInterval(fetchCommute, 900000); // Every 15 min
+
+    // ═══ Pollen ═══
+    async function fetchPollen() {
+      try {
+        const res = await fetch('/api/pollen');
+        const d = await res.json();
+        const container = document.getElementById('pollen-data');
+        const types = d.types || {};
+        const entries = Object.values(types);
+        if (entries.length === 0 || entries.every(t => !t.index)) {
+          container.innerHTML = '<span style="color:#4caf50;">None detected</span>';
+          return;
+        }
+        container.innerHTML = entries.map(t => {
+          const color = t.index <= 1 ? '#4caf50' : t.index <= 2 ? '#8bc34a' : t.index <= 3 ? '#ff9800' : '#f44336';
+          return `<div style="display:flex;justify-content:space-between;margin:2px 0;"><span>${t.name}</span><span style="color:${color};font-weight:600;">${t.category || 'None'}</span></div>`;
+        }).join('');
+      } catch (e) { console.error('Pollen error:', e); }
+    }
+    fetchPollen();
+    setInterval(fetchPollen, 3600000); // Every hour
 
     fetchPowerwall();
     startPowerwallStream();
@@ -2148,8 +2519,99 @@
     setInterval(fetchTemps, 600000);
     setInterval(fetchCrypto, 60000);
 
-    // Dummy news
-    document.getElementById('news').textContent = 'Kalshi fined a MrBeast editor for insider trading on markets related to the YouTube star';
+    // ═══ News Headlines ═══
+    let newsItems = [];
+    let newsIndex = 0;
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '';
+      const mins = Math.round((Date.now() - new Date(dateStr).getTime()) / 60000);
+      if (mins < 60) return mins + 'm ago';
+      if (mins < 1440) return Math.round(mins / 60) + 'h ago';
+      return Math.round(mins / 1440) + 'd ago';
+    }
+
+    function showNextHeadline() {
+      if (!newsItems.length) return;
+      const el = document.getElementById('news-headline');
+      el.classList.add('fade-out');
+      setTimeout(() => {
+        const item = newsItems[newsIndex % newsItems.length];
+        el.innerHTML = `<span class="news-headline-source">${item.source}</span><span class="news-headline-title">${item.title}</span><span class="news-headline-time">${timeAgo(item.pubDate)}</span>`;
+        el.classList.remove('fade-out');
+        newsIndex++;
+      }, 500);
+    }
+
+    async function fetchNews() {
+      try {
+        const res = await fetch('/api/news');
+        const items = await res.json();
+        if (items.length) {
+          newsItems = items;
+          showNextHeadline();
+        }
+      } catch (e) { console.error('News error:', e); }
+    }
+    fetchNews();
+    setInterval(fetchNews, 600000); // Refresh feed every 10 min
+    setInterval(showNextHeadline, 10000); // Rotate every 10 sec
+
+    // ═══ Word of the Day ═══
+    async function fetchWordOfDay() {
+      try {
+        const res = await fetch('/api/word-of-the-day');
+        const d = await res.json();
+        if (d.word && d.word !== '--') {
+          document.getElementById('wotd-word').textContent = d.word;
+          document.getElementById('wotd-phonetic').textContent = d.phonetic || '';
+          document.getElementById('wotd-pos').textContent = d.partOfSpeech || '';
+          document.getElementById('wotd-def').textContent = d.definition || '';
+        }
+      } catch (e) { console.error('Word error:', e); }
+    }
+    fetchWordOfDay();
+    setInterval(fetchWordOfDay, 86400000);
+
+    // ═══ Dad Jokes ═══
+    async function fetchDadJoke() {
+      try {
+        const res = await fetch('/api/dad-joke');
+        const d = await res.json();
+        if (d.joke) document.getElementById('dad-joke').textContent = d.joke;
+      } catch (e) { console.error('Joke error:', e); }
+    }
+    fetchDadJoke();
+    setInterval(fetchDadJoke, 300000);
+
+    // ═══ Today in History ═══
+    let historyEvents = [];
+    let historyIndex = 0;
+    async function fetchTodayHistory() {
+      try {
+        const res = await fetch('/api/today-in-history');
+        const d = await res.json();
+        if (d.events?.length) {
+          historyEvents = d.events;
+          showHistoryEvents();
+        }
+      } catch (e) { console.error('History error:', e); }
+    }
+    function showHistoryEvents() {
+      if (!historyEvents.length) return;
+      const container = document.getElementById('today-history');
+      const show = [];
+      for (let i = 0; i < 3; i++) {
+        show.push(historyEvents[(historyIndex + i) % historyEvents.length]);
+      }
+      container.innerHTML = show.map(e =>
+        `<div class="history-event"><span class="history-year">${e.year}</span><span class="history-text">${e.text}</span></div>`
+      ).join('');
+      historyIndex = (historyIndex + 3) % historyEvents.length;
+    }
+    fetchTodayHistory();
+    setInterval(showHistoryEvents, 30000);
+
   </script>
 </body>
 </html>

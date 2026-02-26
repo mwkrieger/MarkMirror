@@ -94,6 +94,23 @@ const insertSample = db.prepare(`INSERT INTO power_samples (ts, solar_w, battery
 const insertBaseline = db.prepare(`INSERT OR REPLACE INTO daily_baselines (date, solar_exported_wh, battery_exported_wh, battery_imported_wh, grid_imported_wh, grid_exported_wh, load_imported_wh) VALUES (?, ?, ?, ?, ?, ?, ?)`);
 const getBaseline = db.prepare(`SELECT * FROM daily_baselines WHERE date = ?`);
 
+// Vehicle state cache table
+db.exec(`CREATE TABLE IF NOT EXISTS vehicle_cache (
+  vehicle_id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`);
+const upsertVehicle = db.prepare(`INSERT OR REPLACE INTO vehicle_cache (vehicle_id, data, updated_at) VALUES (?, ?, ?)`);
+const getVehicleCache = db.prepare(`SELECT data FROM vehicle_cache WHERE vehicle_id = ?`);
+
+function loadVehicleCache(id) {
+  const row = getVehicleCache.get(id);
+  return row ? JSON.parse(row.data) : null;
+}
+function saveVehicleCache(id, data) {
+  upsertVehicle.run(id, JSON.stringify(data), new Date().toISOString());
+}
+
 console.log("[SQLITE] Energy history database initialized:", DB_PATH);
 
 // Load/initialize data files
@@ -632,6 +649,319 @@ app.get('/api/weather', async (req, res) => {
   }
 });
 
+// ═══ Air Quality API ═══
+app.get('/api/airquality', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.airQuality && now - cachedData.lastUpdate.airQuality < 1800000) {
+      return res.json(cachedData.airQuality);
+    }
+    const url = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${CONFIG.openWeather.lat}&lon=${CONFIG.openWeather.lon}&appid=${CONFIG.openWeather.apiKey}`;
+    const r = await axios.get(url, { timeout: 10000 });
+    const d = r.data.list[0];
+    const aqiLabels = ['', 'Good', 'Fair', 'Moderate', 'Poor', 'Very Poor'];
+    const aqiColors = ['', '#4caf50', '#8bc34a', '#ff9800', '#f44336', '#9c27b0'];
+    const result = {
+      aqi: d.main.aqi,
+      label: aqiLabels[d.main.aqi] || 'Unknown',
+      color: aqiColors[d.main.aqi] || '#fff',
+      pm25: Math.round(d.components.pm2_5 * 10) / 10,
+      pm10: Math.round(d.components.pm10 * 10) / 10,
+      o3: Math.round(d.components.o3 * 10) / 10,
+      no2: Math.round(d.components.no2 * 10) / 10,
+      timestamp: new Date().toISOString()
+    };
+    cachedData.airQuality = result;
+    cachedData.lastUpdate.airQuality = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[AQI] Fetch error:', e.message);
+    res.json(cachedData.airQuality || { aqi: 0, label: '--' });
+  }
+});
+
+// ═══ Garage Door (Tailwind iQ3) ═══
+const TAILWIND_IP = '192.168.86.155';
+const TAILWIND_TOKEN = '542804';
+app.get('/api/garage', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.garage && now - cachedData.lastUpdate.garage < 30000) {
+      return res.json(cachedData.garage);
+    }
+    const r = await axios.post(`http://${TAILWIND_IP}/json`, 
+      { version: '0.1', data: { type: 'get', name: 'dev_st' } },
+      { headers: { 'TOKEN': TAILWIND_TOKEN }, timeout: 5000 }
+    );
+    const d = r.data;
+    const doors = [];
+    for (let i = 1; i <= (d.door_num || 1); i++) {
+      const doorData = d.data?.[`door${i}`];
+      if (doorData) {
+        doors.push({
+          door: i,
+          status: doorData.status === 'close' ? 'closed' : doorData.status === 'open' ? 'open' : doorData.status,
+          lockup: doorData.lockup,
+          disabled: doorData.disabled
+        });
+      }
+    }
+    const result = { doors, firmware: d.fw_ver, rssi: d.router_rssi, timestamp: new Date().toISOString() };
+    cachedData.garage = result;
+    cachedData.lastUpdate.garage = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[GARAGE] Fetch error:', e.message);
+    res.json(cachedData.garage || { doors: [], raw: '--' });
+  }
+});
+
+// ═══ Commute Time (Google Distance Matrix) ═══
+const GOOGLE_API_KEY = 'AIzaSyBYFi-e9suDNHEhwmp-AR-hhy4kW5Ed4jk';
+app.get('/api/commute', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.commute && now - cachedData.lastUpdate.commute < 900000) {
+      return res.json(cachedData.commute);
+    }
+    const r = await axios.get('https://maps.googleapis.com/maps/api/distancematrix/json', {
+      params: {
+        origins: '113 Circle Drive, Hawley, PA',
+        destinations: '400 West 43rd Street, New York, NY',
+        departure_time: 'now',
+        key: GOOGLE_API_KEY
+      },
+      timeout: 10000
+    });
+    const el = r.data.rows?.[0]?.elements?.[0];
+    if (el?.status === 'OK') {
+      const result = {
+        duration: el.duration_in_traffic?.text || el.duration?.text,
+        durationMin: Math.round((el.duration_in_traffic?.value || el.duration?.value) / 60),
+        distance: el.distance?.text,
+        distanceMi: Math.round(el.distance?.value * 0.000621371),
+        via: 'I-84 W',
+        timestamp: new Date().toISOString()
+      };
+      cachedData.commute = result;
+      cachedData.lastUpdate.commute = now;
+      res.json(result);
+    } else {
+      res.json(cachedData.commute || { duration: '--', durationMin: 0 });
+    }
+  } catch (e) {
+    console.error('[COMMUTE] Fetch error:', e.message);
+    res.json(cachedData.commute || { duration: '--', durationMin: 0 });
+  }
+});
+
+
+// ═══ Word of the Day (Free Dictionary API + Wordnik fallback) ═══
+app.get('/api/word-of-the-day', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.wordOfDay && now - cachedData.lastUpdate.wordOfDay < 86400000) {
+      return res.json(cachedData.wordOfDay);
+    }
+    // Use a curated word list seeded by date
+    const words = ['ephemeral','sanguine','ubiquitous','mellifluous','quintessential','serendipity','effervescent','luminous','resplendent','ineffable','petrichor','sonder','vellichor','apricity','eudaimonia','numinous','halcyon','ethereal','dulcet','sonorous','verdant','redolent','scintilla','susurrus','limerence','oblivion','reverie','solitude','zenith','cascade','gossamer','labyrinthine','incandescent','cerulean','iridescent','diaphanous','bucolic','felicity','eloquence','magnanimous','sagacious','vivacious','pernicious','ebullient','insouciant','surreptitious','loquacious','perspicacious','pugnacious','recalcitrant'];
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    const word = words[dayOfYear % words.length];
+    const r = await axios.get(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`, { timeout: 8000 });
+    const entry = r.data?.[0];
+    const meaning = entry?.meanings?.[0];
+    const result = {
+      word: entry?.word || word,
+      phonetic: entry?.phonetic || '',
+      partOfSpeech: meaning?.partOfSpeech || '',
+      definition: meaning?.definitions?.[0]?.definition || '',
+      example: meaning?.definitions?.[0]?.example || '',
+      timestamp: new Date().toISOString()
+    };
+    cachedData.wordOfDay = result;
+    cachedData.lastUpdate.wordOfDay = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[WORD] Fetch error:', e.message);
+    res.json(cachedData.wordOfDay || { word: '--', definition: '' });
+  }
+});
+
+// ═══ Dad Jokes (icanhazdadjoke.com) ═══
+app.get('/api/dad-joke', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.dadJoke && now - cachedData.lastUpdate.dadJoke < 300000) {
+      return res.json(cachedData.dadJoke);
+    }
+    const r = await axios.get('https://icanhazdadjoke.com/', {
+      headers: { Accept: 'application/json' },
+      timeout: 8000
+    });
+    const result = { joke: r.data?.joke || '', timestamp: new Date().toISOString() };
+    cachedData.dadJoke = result;
+    cachedData.lastUpdate.dadJoke = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[JOKE] Fetch error:', e.message);
+    res.json(cachedData.dadJoke || { joke: '' });
+  }
+});
+
+// ═══ Today in History (Wikipedia) ═══
+app.get('/api/today-in-history', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.todayHistory && now - cachedData.lastUpdate.todayHistory < 86400000) {
+      return res.json(cachedData.todayHistory);
+    }
+    const d = new Date();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const r = await axios.get(`https://api.wikimedia.org/feed/v1/wikipedia/en/onthisday/selected/${month}/${day}`, {
+      headers: { 'User-Agent': 'WallDashboard/1.0' },
+      timeout: 10000
+    });
+    const events = (r.data?.selected || []).map(e => ({
+      year: e.year,
+      text: e.text,
+      pages: (e.pages || []).slice(0, 1).map(p => p.titles?.normalized || '').filter(Boolean)
+    }));
+    const result = { events, month: d.getMonth() + 1, day: d.getDate(), timestamp: new Date().toISOString() };
+    cachedData.todayHistory = result;
+    cachedData.lastUpdate.todayHistory = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[HISTORY] Fetch error:', e.message);
+    res.json(cachedData.todayHistory || { events: [] });
+  }
+});
+
+// ═══ Pollen (Google Pollen API) ═══
+app.get('/api/pollen', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.pollen && now - cachedData.lastUpdate.pollen < 3600000) {
+      return res.json(cachedData.pollen);
+    }
+    const r = await axios.get('https://pollen.googleapis.com/v1/forecast:lookup', {
+      params: { 'location.latitude': CONFIG.openWeather.lat, 'location.longitude': CONFIG.openWeather.lon, days: 1, key: GOOGLE_API_KEY },
+      timeout: 10000
+    });
+    const day = r.data.dailyInfo?.[0];
+    const types = {};
+    for (const t of (day?.pollenTypeInfo || [])) {
+      types[t.code.toLowerCase()] = {
+        name: t.displayName,
+        index: t.indexInfo?.value || 0,
+        category: t.indexInfo?.category || 'None',
+        color: t.indexInfo?.color ? `rgb(${(t.indexInfo.color.red||0)*255},${(t.indexInfo.color.green||0)*255},${(t.indexInfo.color.blue||0)*255})` : '#4caf50'
+      };
+    }
+    const result = { types, date: day?.date, timestamp: new Date().toISOString() };
+    cachedData.pollen = result;
+    cachedData.lastUpdate.pollen = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[POLLEN] Fetch error:', e.message);
+    res.json(cachedData.pollen || { types: {} });
+  }
+});
+
+// ═══ Alarm.com Security ═══
+const nodeADC = require('node-alarm-dot-com');
+const ALARM_USER = 'mark@markkrieger.com';
+const ALARM_PASS = 'M.Kr13g3r!Alarm';
+const ALARM_MFA = 'C2174DE91F7C32B1DF29E23870E150FAD55584FD9AF5C4A5D6F4574F7F9D7FF4';
+const ALARM_PANEL_STATES = { 1: 'Disarmed', 2: 'Armed Stay', 3: 'Armed Away', 4: 'Armed Night' };
+const ALARM_SENSOR_STATES = { 0: 'unknown', 1: 'closed', 2: 'open', 3: 'active', 4: 'idle', 5: 'bypassed' };
+
+app.get('/api/alarm', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (!req.query.force && cachedData.alarm && now - cachedData.lastUpdate.alarm < 60000) {
+      return res.json(cachedData.alarm);
+    }
+    const auth = await nodeADC.login(ALARM_USER, ALARM_PASS, ALARM_MFA);
+    const state = await nodeADC.getCurrentState(auth.systems[0], auth);
+    const partition = state.partitions[0];
+    const panelState = partition.attributes.state;
+    
+    const sensors = state.sensors.map(s => ({
+      name: s.attributes.description,
+      state: ALARM_SENSOR_STATES[s.attributes.state] || String(s.attributes.state),
+      rawState: s.attributes.state
+    }));
+
+    // Filter to door/window sensors that are open (exclude non-entry sensors)
+    const nonEntrySensors = ['Freeze Sensor', 'Basement Flood', 'Smoke Detector', 'Glass Break', 'Panel Glass Break', 'Panel Camera', 'IQ Remote 1'];
+    const openSensors = sensors.filter(s => s.state === 'open' && !nonEntrySensors.includes(s.name));
+
+    const result = {
+      panel: ALARM_PANEL_STATES[panelState] || 'Unknown (' + panelState + ')',
+      panelState,
+      armed: panelState > 1,
+      hasAlarm: partition.attributes.hasActiveAlarm || false,
+      sensors,
+      openSensors,
+      timestamp: new Date().toISOString()
+    };
+    cachedData.alarm = result;
+    cachedData.lastUpdate.alarm = now;
+    console.log('[ALARM] Status:', result.panel, '| Open sensors:', openSensors.length);
+    res.json(result);
+  } catch (e) {
+    console.error('[ALARM] Fetch error:', e.message);
+    res.json(cachedData.alarm || { panel: '--', sensors: [] });
+  }
+});
+
+// ═══ News RSS Feeds ═══
+const RSSParser = require('rss-parser');
+const rssParser = new RSSParser();
+const NEWS_FEEDS = [
+  { name: 'NYT', url: 'https://www.nytimes.com/services/xml/rss/nyt/HomePage.xml' },
+  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
+  { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+  { name: 'CNBC', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114' },
+  { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' }
+];
+
+app.get('/api/news', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (cachedData.news && now - cachedData.lastUpdate.news < 600000) {
+      return res.json(cachedData.news);
+    }
+    const allItems = [];
+    const results = await Promise.allSettled(
+      NEWS_FEEDS.map(async feed => {
+        try {
+          const parsed = await rssParser.parseURL(feed.url);
+          return (parsed.items || []).slice(0, 5).map(item => ({
+            source: feed.name,
+            title: item.title,
+            link: item.link,
+            image: item.enclosure?.url || item['media:content']?.$.url || item['media:thumbnail']?.$.url || null,
+            pubDate: item.pubDate ? new Date(item.pubDate).toISOString() : null,
+            snippet: (item.contentSnippet || '').substring(0, 120)
+          }));
+        } catch { return []; }
+      })
+    );
+    results.forEach(r => { if (r.status === 'fulfilled') allItems.push(...r.value); });
+    // Sort by date, newest first
+    allItems.sort((a, b) => (b.pubDate || '') > (a.pubDate || '') ? 1 : -1);
+    const result = allItems.slice(0, 30);
+    cachedData.news = result;
+    cachedData.lastUpdate.news = now;
+    res.json(result);
+  } catch (e) {
+    console.error('[NEWS] Fetch error:', e.message);
+    res.json(cachedData.news || []);
+  }
+});
+
 app.get('/api/temps', async (req, res) => {
   try {
     const now = Date.now();
@@ -964,7 +1294,7 @@ setInterval(async () => {
 // ═══ Tesla Vehicle API ═══
 const TESLA_TOKENS_FILE = '/home/mark/MagicMirror/modules/MMM-Powerwall/tokens.json';
 const TESLA_VEHICLE_ID = 1492666792375909;
-let teslaCache = { data: null, lastUpdate: 0 };
+let teslaCache = { data: loadVehicleCache('tesla'), lastUpdate: 0 };
 
 function getTeslaToken() {
   try {
@@ -988,7 +1318,7 @@ async function fetchTeslaVehicle(wake = false) {
       await new Promise(r => setTimeout(r, 8000));
     }
 
-    const r = await axios.get(`${base}/api/1/vehicles/${TESLA_VEHICLE_ID}/vehicle_data`, { headers, timeout: 15000 });
+    const r = await axios.get(`${base}/api/1/vehicles/${TESLA_VEHICLE_ID}/vehicle_data?endpoints=${encodeURIComponent('vehicle_state;drive_state;charge_state;location_data')}`, { headers, timeout: 15000 });
     const d = r.data.response;
 
     const result = {
@@ -1014,13 +1344,30 @@ async function fetchTeslaVehicle(wake = false) {
       timestamp: new Date().toISOString()
     };
 
+    // Reverse geocode location
+    if (result.latitude && result.longitude) {
+      try {
+        const geoRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?lat=${result.latitude}&lon=${result.longitude}&format=json&zoom=14`, {
+          headers: { 'User-Agent': 'WallDashboard/1.0' }, timeout: 5000
+        });
+        const addr = geoRes.data?.address;
+        if (addr) {
+          result.location = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || '';
+          if (addr.state) result.location += (result.location ? ', ' : '') + addr.state;
+        }
+      } catch (e) { /* geocode fail is non-critical */ }
+    }
+
     teslaCache = { data: result, lastUpdate: Date.now() };
-    console.log('[TESLA] Vehicle data updated:', result.name, result.battery + '%');
+    saveVehicleCache('tesla', result);
+    console.log('[TESLA] Vehicle data updated:', result.name, result.battery + '%', result.location || '');
     return result;
   } catch (e) {
     if (e.response?.status === 408) {
       console.log('[TESLA] Vehicle asleep');
-      return { state: 'asleep', name: 'Ohm', timestamp: new Date().toISOString() };
+      const sleepData = teslaCache.data ? { ...teslaCache.data, state: 'asleep' } : { state: 'asleep', name: 'Ohm' };
+      sleepData.timestamp = new Date().toISOString();
+      return sleepData;
     }
     console.error('[TESLA] Fetch error:', e.response?.status || e.message);
     return teslaCache.data;
@@ -1049,6 +1396,193 @@ setInterval(async () => {
 
 // Initial fetch
 setTimeout(() => fetchTeslaVehicle(false), 10000);
+
+// ═══ Rivian Vehicle API ═══
+const RIVIAN_TOKENS_FILE = path.join(__dirname, 'data', 'rivian-tokens.json');
+const RIVIAN_VEHICLE_ID = '01-272472941';
+const RIVIAN_GQL = 'https://rivian.com/api/gql/gateway/graphql';
+let rivianCache = { data: loadVehicleCache('rivian'), lastUpdate: 0 };
+
+const RIVIAN_EMAIL = 'mark@markkrieger.com';
+const RIVIAN_PASSWORD = 'M.Kr13g3r!Rivian';
+let rivianRefreshing = false;
+
+function getRivianTokens() {
+  try { return JSON.parse(fs.readFileSync(RIVIAN_TOKENS_FILE, 'utf8')); }
+  catch (e) { console.error('[RIVIAN] Token read error:', e.message); return null; }
+}
+
+function saveRivianTokens(tokens) {
+  tokens.timestamp = new Date().toISOString();
+  fs.writeFileSync(RIVIAN_TOKENS_FILE, JSON.stringify(tokens, null, 2));
+}
+
+function isRivianTokenExpired(tokens) {
+  try {
+    const payload = JSON.parse(Buffer.from(tokens.accessToken.split('.')[1], 'base64').toString());
+    const expiresAt = payload.exp * 1000;
+    const margin = 5 * 60 * 1000; // 5 min margin
+    return Date.now() > (expiresAt - margin);
+  } catch { return true; }
+}
+
+const RIVIAN_BASE_HEADERS = { 'Content-Type': 'application/json', 'apollographql-client-name': 'com.rivian.android.consumer' };
+
+async function rivianGQL(tokens, operationName, query, variables = {}) {
+  const res = await axios.post(RIVIAN_GQL, { operationName, variables, query }, {
+    headers: {
+      ...RIVIAN_BASE_HEADERS,
+      'a-sess': tokens.appSessionToken,
+      'u-sess': tokens.userSessionToken,
+      'csrf-token': tokens.csrfToken,
+      'Authorization': 'Bearer ' + tokens.accessToken
+    },
+    timeout: 15000
+  });
+  return res.data;
+}
+
+async function refreshRivianTokens() {
+  if (rivianRefreshing) return getRivianTokens();
+  rivianRefreshing = true;
+  try {
+    console.log('[RIVIAN] Refreshing tokens...');
+    // Step 1: Fresh CSRF + app session
+    const csrfRes = await axios.post(RIVIAN_GQL, {
+      operationName: 'CreateCSRFToken', variables: [],
+      query: 'mutation CreateCSRFToken { createCsrfToken { __typename csrfToken appSessionToken } }'
+    }, { headers: RIVIAN_BASE_HEADERS, timeout: 10000 });
+    const { csrfToken, appSessionToken } = csrfRes.data.data.createCsrfToken;
+    const authHeaders = { ...RIVIAN_BASE_HEADERS, 'a-sess': appSessionToken, 'csrf-token': csrfToken };
+
+    // Step 2: Login (hoping session is still trusted — no MFA needed)
+    const loginRes = await axios.post(RIVIAN_GQL, {
+      operationName: 'Login',
+      variables: { email: RIVIAN_EMAIL, password: RIVIAN_PASSWORD },
+      query: 'mutation Login($email: String!, $password: String!) { login(email: $email, password: $password) { __typename ... on MobileLoginResponse { accessToken refreshToken userSessionToken } ... on MobileMFALoginResponse { otpToken } } }'
+    }, { headers: authHeaders, timeout: 15000 });
+
+    const loginData = loginRes.data.data.login;
+    if (loginData.__typename === 'MobileMFALoginResponse') {
+      console.error('[RIVIAN] ⚠️ MFA required for token refresh — cannot auto-refresh. Tokens will expire.');
+      rivianRefreshing = false;
+      return getRivianTokens(); // return existing (may still work briefly)
+    }
+
+    const tokens = {
+      accessToken: loginData.accessToken,
+      refreshToken: loginData.refreshToken,
+      userSessionToken: loginData.userSessionToken,
+      appSessionToken,
+      csrfToken
+    };
+    saveRivianTokens(tokens);
+    console.log('[RIVIAN] ✅ Tokens refreshed successfully');
+    rivianRefreshing = false;
+    return tokens;
+  } catch (e) {
+    console.error('[RIVIAN] Token refresh error:', e.response?.status || e.message);
+    rivianRefreshing = false;
+    return null;
+  }
+}
+
+async function fetchRivianVehicle() {
+  let tokens = getRivianTokens();
+  if (!tokens) return null;
+
+  // Proactively refresh if token is about to expire
+  if (isRivianTokenExpired(tokens)) {
+    console.log('[RIVIAN] Access token expired/expiring, refreshing...');
+    tokens = await refreshRivianTokens();
+    if (!tokens) return rivianCache.data;
+  }
+
+  try {
+    const d = await rivianGQL(tokens, 'GetVehicleState',
+      'query GetVehicleState($vehicleID: String!) { vehicleState(id: $vehicleID) { __typename powerState { timeStamp value } batteryLevel { timeStamp value } distanceToEmpty { timeStamp value } vehicleMileage { timeStamp value } chargerState { timeStamp value } chargerStatus { timeStamp value } cabinClimateInteriorTemperature { timeStamp value } gnssSpeed { timeStamp value } otaCurrentVersionYear { timeStamp value } otaCurrentVersionWeek { timeStamp value } otaCurrentVersionNumber { timeStamp value } batteryLimit { timeStamp value } timeToEndOfCharge { timeStamp value } doorFrontLeftLocked { timeStamp value } gearGuardLocked { timeStamp value } batteryCapacity { timeStamp value } gnssLocation { latitude longitude timeStamp } } }',
+      { vehicleID: RIVIAN_VEHICLE_ID }
+    );
+
+    if (d.errors) {
+      console.error('[RIVIAN] GQL errors:', d.errors[0]?.message);
+      if (d.errors[0]?.extensions?.code === 'UNAUTHENTICATED') {
+        tokens = await refreshRivianTokens();
+        if (tokens) return fetchRivianVehicle(); // retry once
+      }
+      return rivianCache.data;
+    }
+
+    const vs = d.data.vehicleState;
+    const mileageMeters = vs.vehicleMileage?.value;
+    const mileageMi = mileageMeters ? Math.round(mileageMeters * 0.000621371) : null;
+    const otaVer = vs.otaCurrentVersionYear?.value && vs.otaCurrentVersionWeek?.value
+      ? `${vs.otaCurrentVersionYear.value}.${vs.otaCurrentVersionWeek.value}.${vs.otaCurrentVersionNumber?.value || 0}`
+      : null;
+
+    let chargingState = 'Not Charging';
+    if (vs.chargerState?.value === 'charging_active') chargingState = 'Charging';
+    else if (vs.chargerState?.value === 'charging_complete') chargingState = 'Complete';
+    else if (vs.chargerStatus?.value?.includes('connected')) chargingState = 'Connected';
+
+    const result = {
+      name: 'BBT',
+      model: 'R1T',
+      state: vs.powerState?.value || 'unknown',
+      battery: vs.batteryLevel?.value ? Math.round(vs.batteryLevel.value) : null,
+      range: vs.distanceToEmpty?.value ? Math.round(vs.distanceToEmpty.value * 0.621371) : null,
+      chargingState,
+      chargeLimit: vs.batteryLimit?.value ? Math.round(vs.batteryLimit.value) : null,
+      timeToFullCharge: vs.timeToEndOfCharge?.value || 0,
+      odometer: mileageMi,
+      locked: vs.doorFrontLeftLocked?.value === 'locked',
+      softwareVersion: otaVer,
+      insideTemp: vs.cabinClimateInteriorTemperature?.value,
+      speed: vs.gnssSpeed?.value ? Math.round(vs.gnssSpeed.value * 0.621371) : null,
+      batteryCapacity: vs.batteryCapacity?.value ? Math.round(vs.batteryCapacity.value * 10) / 10 : null,
+      timestamp: new Date().toISOString()
+    };
+
+    // Reverse geocode
+    const loc = vs?.gnssLocation;
+    if (loc?.latitude && loc?.longitude) {
+      result.latitude = loc.latitude;
+      result.longitude = loc.longitude;
+      try {
+        const geoRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?lat=${loc.latitude}&lon=${loc.longitude}&format=json&zoom=14`, {
+          headers: { 'User-Agent': 'WallDashboard/1.0' }, timeout: 5000
+        });
+        const addr = geoRes.data?.address;
+        if (addr) {
+          result.location = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || '';
+          if (addr.state) result.location += (result.location ? ', ' : '') + addr.state;
+        }
+      } catch (e) { /* geocode fail is non-critical */ }
+    }
+
+    rivianCache = { data: result, lastUpdate: Date.now() };
+    saveVehicleCache('rivian', result);
+    console.log('[RIVIAN] Vehicle data updated:', result.name, result.battery + '%', result.chargingState, result.location || '');
+    return result;
+  } catch (e) {
+    console.error('[RIVIAN] Fetch error:', e.response?.status || e.message);
+    return rivianCache.data;
+  }
+}
+
+app.get('/api/rivian/vehicle', async (req, res) => {
+  const now = Date.now();
+  if (rivianCache.data && now - rivianCache.lastUpdate < 120000) {
+    return res.json(rivianCache.data);
+  }
+  const data = await fetchRivianVehicle();
+  res.json(data || { state: 'unavailable' });
+});
+
+// Poll Rivian every 5 minutes
+setInterval(() => fetchRivianVehicle(), 300000);
+setTimeout(() => fetchRivianVehicle(), 5000);
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎯 Wall Dashboard v5 (Alerts + Analytics) running on http://0.0.0.0:${PORT}`);
   console.log(`✨ Hot-reload enabled`);
